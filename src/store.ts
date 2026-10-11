@@ -9,7 +9,11 @@ const ajv = new Ajv({ strict: false });
 export const storeDir = (root: string) => join(root, '.antidrift');
 export const entitiesDir = (root: string) => join(storeDir(root), 'entities');
 export const indexPath = (root: string) => join(storeDir(root), 'index.json');
-export const entityPath = (root: string, id: string) => join(entitiesDir(root), `${id}.json`);
+export const ID_RE = /^[A-Za-z0-9_.-]+$/;
+export const entityPath = (root: string, id: string) => {
+  if (!id || !ID_RE.test(id)) throw new Error(`Invalid entity id: ${JSON.stringify(id)}`);
+  return join(entitiesDir(root), `${id}.json`);
+};
 
 function canonical(v: unknown): string {
   if (Array.isArray(v)) return `[${v.map(canonical).join(',')}]`;

@@ -48,34 +48,46 @@ export function cmdNotify(root: string, id: string): string {
   );
 }
 
+const USAGE = 'usage: antidrift <init|list|show <id>|scan|reconcile <id>|notify <id>>';
+function requireArg(arg: string | undefined, what: string): string {
+  if (!arg) throw new Error(`missing <${what}>. ${USAGE}`);
+  return arg;
+}
+
 function main(): void {
   const [cmd, arg] = process.argv.slice(2);
   const root = process.cwd();
-  switch (cmd) {
-    case 'init':
-      initStore(root);
-      console.log('antidrift: initialized .antidrift/');
-      break;
-    case 'list':
-      console.log(cmdList(root));
-      break;
-    case 'show':
-      console.log(cmdShow(root, arg));
-      break;
-    case 'scan': {
-      const r = cmdScan(root);
-      console.log(r.report);
-      process.exit(r.problems.length ? 1 : 0);
+  try {
+    switch (cmd) {
+      case 'init':
+        initStore(root);
+        console.log('antidrift: initialized .antidrift/');
+        break;
+      case 'list':
+        console.log(cmdList(root));
+        break;
+      case 'show':
+        console.log(cmdShow(root, requireArg(arg, 'id')));
+        break;
+      case 'scan': {
+        const r = cmdScan(root);
+        console.log(r.report);
+        process.exit(r.problems.length ? 1 : 0);
+        break;
+      }
+      case 'reconcile':
+        console.log(JSON.stringify(reconcileEntity(root, requireArg(arg, 'id'))));
+        break;
+      case 'notify':
+        console.log(cmdNotify(root, requireArg(arg, 'id')));
+        break;
+      default:
+        console.error(USAGE);
+        process.exit(2);
     }
-    case 'reconcile':
-      console.log(JSON.stringify(reconcileEntity(root, arg)));
-      break;
-    case 'notify':
-      console.log(cmdNotify(root, arg));
-      break;
-    default:
-      console.error('usage: antidrift <init|list|show <id>|scan|reconcile <id>|notify <id>>');
-      process.exit(2);
+  } catch (e) {
+    console.error('antidrift: ' + (e as Error).message);
+    process.exit(2);
   }
 }
 

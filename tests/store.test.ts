@@ -45,3 +45,8 @@ test('computeIndex returns entries without writing index.json', () => {
   expect(idx.map((e) => e.id)).toEqual(['student']);
   expect(existsSync(S.indexPath(root))).toBe(false);
 });
+test('entityPath rejects empty and path-traversal ids', () => {
+  expect(() => S.entityPath(root, '')).toThrow();
+  expect(() => S.entityPath(root, '../evil')).toThrow();
+  expect(() => S.entityPath(root, 'student')).not.toThrow();
+});
