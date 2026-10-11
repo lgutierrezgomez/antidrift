@@ -1,0 +1,32 @@
+import { test, expect, beforeEach } from 'vitest';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import * as S from '../src/store.js';
+import type { Entity } from '../src/types.js';
+
+let root: string;
+beforeEach(() => { root = mkdtempSync(join(tmpdir(), 'ad-')); });
+const ent = (over: Partial<Entity> = {}): Entity =>
+  ({ id: 'student', version: 1, hash: '', schema: { type: 'object', properties: { name: { type: 'string' } } }, ...over });
+
+test('computeHash is stable regardless of key order', () => {
+  expect(S.computeHash({ a: 1, b: 2 })).toBe(S.computeHash({ b: 2, a: 1 }));
+});
+test('writeEntity rejects invalid JSON Schema', () => {
+  expect(() => S.writeEntity(root, ent({ schema: { type: 'not-a-type' } }))).toThrow();
+});
+test('reconcile is idempotent when schema unchanged', () => {
+  const e = ent({ hash: S.computeHash(ent().schema) });
+  S.writeEntity(root, e);
+  expect(S.reconcileEntity(root, 'student').version).toBe(1);
+});
+test('reconcile bumps version when schema changed', () => {
+  S.writeEntity(root, ent({ hash: 'stale-hash' }));
+  expect(S.reconcileEntity(root, 'student').version).toBe(2);
+});
+test('buildIndex lists all entities', () => {
+  S.writeEntity(root, ent({ hash: S.computeHash(ent().schema), title: 'Student', summary: 'a learner' }));
+  const idx = S.buildIndex(root);
+  expect(idx).toEqual([{ id: 'student', title: 'Student', version: 1, hash: S.computeHash(ent().schema), summary: 'a learner', file: 'entities/student.json' }]);
+});
