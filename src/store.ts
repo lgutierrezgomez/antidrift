@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import Ajv from 'ajv/dist/2020.js';
+import { Ajv2020 as Ajv } from 'ajv/dist/2020.js';
 import type { Entity, IndexEntry } from './types.js';
 
 const ajv = new Ajv({ strict: false });
@@ -48,7 +48,11 @@ export function listEntityIds(root: string): string[] {
 export function reconcileEntity(root: string, id: string): Entity {
   const e = readEntity(root, id);
   const hash = computeHash(e.schema);
-  if (hash !== e.hash) {
+  if (e.hash === '') {
+    // First reconcile: stamp the hash, keep the authored version.
+    e.hash = hash;
+    writeEntity(root, e);
+  } else if (hash !== e.hash) {
     e.version += 1;
     e.hash = hash;
     writeEntity(root, e);
@@ -57,6 +61,7 @@ export function reconcileEntity(root: string, id: string): Entity {
 }
 
 export function buildIndex(root: string): IndexEntry[] {
+  if (!existsSync(entitiesDir(root))) return [];
   const index = listEntityIds(root).map((id) => {
     const e = readEntity(root, id);
     return { id: e.id, title: e.title ?? e.id, version: e.version, hash: e.hash, summary: e.summary ?? '', file: `entities/${id}.json` };

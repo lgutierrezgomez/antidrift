@@ -25,8 +25,17 @@ test('reconcile bumps version when schema changed', () => {
   S.writeEntity(root, ent({ hash: 'stale-hash' }));
   expect(S.reconcileEntity(root, 'student').version).toBe(2);
 });
+test('reconcile stamps hash without bumping on first reconcile (empty hash)', () => {
+  S.writeEntity(root, ent({ hash: '' }));
+  const e = S.reconcileEntity(root, 'student');
+  expect(e.version).toBe(1);
+  expect(e.hash).toBe(S.computeHash(ent().schema));
+});
 test('buildIndex lists all entities', () => {
   S.writeEntity(root, ent({ hash: S.computeHash(ent().schema), title: 'Student', summary: 'a learner' }));
   const idx = S.buildIndex(root);
   expect(idx).toEqual([{ id: 'student', title: 'Student', version: 1, hash: S.computeHash(ent().schema), summary: 'a learner', file: 'entities/student.json' }]);
+});
+test('buildIndex returns empty without throwing when no store exists', () => {
+  expect(S.buildIndex(root)).toEqual([]);
 });

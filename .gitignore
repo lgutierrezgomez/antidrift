@@ -1,4 +1,6 @@
 node_modules/
-dist/
 .superpowers/
 *.log
+
+# dist/ is intentionally committed: the Claude Code plugin's commands/hooks
+# reference dist/cli.js, so the compiled output must ship with the repo.
