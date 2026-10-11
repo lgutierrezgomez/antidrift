@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import { fileURLToPath } from 'node:url';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { buildIndex, computeIndex, readEntity, reconcileEntity, initStore } from './store.js';
 import { scanRepo } from './scanner.js';
 import { computeDrift, problems } from './drift.js';
+import { commentSyntax } from './comment.js';
 import type { DriftItem } from './types.js';
 
 export function cmdList(root: string): string {
@@ -48,7 +50,20 @@ export function cmdNotify(root: string, id: string): string {
   );
 }
 
-const USAGE = 'usage: antidrift <init|list|show <id>|scan|reconcile <id>|notify <id>>';
+export function cmdTag(root: string, id: string, target: string): string {
+  const i = target.lastIndexOf(':');
+  const file = target.slice(0, i);
+  const line = Number(target.slice(i + 1));
+  const version = readEntity(root, id).version; // throws if id invalid/missing
+  const lines = readFileSync(file, 'utf8').split('\n');
+  if (!Number.isInteger(line) || line < 1 || line > lines.length + 1) throw new Error(`line ${line} out of range for ${file}`);
+  const [pre, post] = commentSyntax(file);
+  lines.splice(line - 1, 0, `${pre}antidrift #${id}@${version}${post}`);
+  writeFileSync(file, lines.join('\n'));
+  return `tagged ${file}:${line} with #${id}@${version}`;
+}
+
+const USAGE = 'usage: antidrift <init|list|show <id>|scan|reconcile <id>|notify <id>|tag <id> <file:line>>';
 function requireArg(arg: string | undefined, what: string): string {
   if (!arg) throw new Error(`missing <${what}>. ${USAGE}`);
   return arg;
@@ -80,6 +95,9 @@ function main(): void {
         break;
       case 'notify':
         console.log(cmdNotify(root, requireArg(arg, 'id')));
+        break;
+      case 'tag':
+        console.log(cmdTag(root, requireArg(arg, 'id'), requireArg(process.argv[4], 'file:line')));
         break;
       default:
         console.error(USAGE);
