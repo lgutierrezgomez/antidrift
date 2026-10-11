@@ -45,7 +45,46 @@ export const importOpenApi: Importer = (src) => {
   });
 };
 
+const PRISMA_SCALAR: Record<string, string> = {
+  String: 'string',
+  Int: 'integer',
+  BigInt: 'integer',
+  Float: 'number',
+  Decimal: 'number',
+  Boolean: 'boolean',
+  DateTime: 'string',
+  Json: 'object',
+  Bytes: 'string',
+};
+
+export const importPrisma: Importer = (src) => {
+  const models = [...src.matchAll(/model\s+(\w+)\s*\{([^}]*)\}/g)];
+  const names = new Set(models.map((m) => m[1]));
+  return models.map(([, name, body]) => {
+    const properties: Record<string, unknown> = {};
+    const required: string[] = [];
+    const relationships: string[] = [];
+    for (const raw of body.split('\n')) {
+      const m = raw.trim().match(/^(\w+)\s+(\w+)(\[\])?(\?)?/);
+      if (!m) continue;
+      const [, field, type, arr, opt] = m;
+      if (names.has(type)) {
+        relationships.push(sanitizeId(type));
+        continue;
+      }
+      const js = PRISMA_SCALAR[type];
+      if (!js) continue; // enum / unknown — skip (documented limitation)
+      properties[field] = arr ? { type: 'array', items: { type: js } } : { type: js };
+      if (!opt && !arr) required.push(field);
+    }
+    const schema: Record<string, unknown> = { type: 'object', properties };
+    if (required.length) schema.required = required;
+    return mk(name, schema, relationships);
+  });
+};
+
 export const IMPORTERS: Record<string, Importer> = {
   'json-schema': importJsonSchema,
   openapi: importOpenApi,
+  prisma: importPrisma,
 };

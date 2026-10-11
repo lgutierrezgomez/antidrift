@@ -1,5 +1,5 @@
 import { test, expect } from 'vitest';
-import { importJsonSchema, importOpenApi, sanitizeId } from '../src/importers.js';
+import { importJsonSchema, importOpenApi, importPrisma, sanitizeId } from '../src/importers.js';
 
 test('sanitizeId coerces illegal chars', () => {
   expect(sanitizeId('User Role!')).toBe('User-Role-');
@@ -31,4 +31,22 @@ components:
   const student = ents.find((e) => e.id === 'Student')!;
   expect(ents.map((e) => e.id).sort()).toEqual(['Course', 'Student']);
   expect(student.relationships).toEqual(['Course']);
+});
+test('prisma importer maps scalars, optional/array, and relations', () => {
+  const src = `
+model Student {
+  id    Int      @id
+  name  String
+  bio   String?
+  tags  String[]
+  course Course
+}
+model Course { id Int @id }`;
+  const s = importPrisma(src, 'schema').find((e) => e.id === 'Student')!;
+  expect(s.schema).toMatchObject({
+    type: 'object',
+    properties: { id: { type: 'integer' }, name: { type: 'string' }, bio: { type: 'string' }, tags: { type: 'array', items: { type: 'string' } } },
+  });
+  expect(s.schema.required).toEqual(['id', 'name']);
+  expect(s.relationships).toEqual(['Course']);
 });
