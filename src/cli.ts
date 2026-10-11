@@ -16,9 +16,28 @@ export function cmdList(root: string): string {
 
 export function cmdShow(root: string, id: string): string {
   const e = readEntity(root, id);
-  const drift = computeDrift(scanRepo(root).filter((t) => t.id === id), computeIndex(root));
+  const index = computeIndex(root);
+  const known = new Set(index.map((x) => x.id));
+  const drift = computeDrift(scanRepo(root).filter((t) => t.id === id), index);
   const sites = drift.map((d) => `  ${d.tag.file}:${d.tag.line}  @${d.tag.version}  [${d.status}]`).join('\n') || '  (no usages tagged)';
-  return [`#${e.id}@${e.version}  (hash ${e.hash})`, e.summary, 'Schema:', JSON.stringify(e.schema, null, 2), 'Usages:', sites]
+  const outgoing = (e.relationships ?? []).map((r) => `  #${r}${known.has(r) ? '' : ' [broken-ref]'}`).join('\n') || '  (none)';
+  const incoming =
+    readAllEntities(root)
+      .filter((x) => (x.relationships ?? []).includes(id))
+      .map((x) => `  #${x.id}`)
+      .join('\n') || '  (none)';
+  return [
+    `#${e.id}@${e.version}  (hash ${e.hash})`,
+    e.summary,
+    'Schema:',
+    JSON.stringify(e.schema, null, 2),
+    'Usages:',
+    sites,
+    'Relationships:',
+    outgoing,
+    'Referenced by:',
+    incoming,
+  ]
     .filter(Boolean)
     .join('\n');
 }

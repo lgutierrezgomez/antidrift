@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as S from '../src/store.js';
-import { cmdList, cmdScan, cmdNotify } from '../src/cli.js';
+import { cmdList, cmdScan, cmdNotify, cmdShow } from '../src/cli.js';
 import type { Entity } from '../src/types.js';
 
 let root: string;
@@ -36,4 +36,15 @@ test('cmdNotify bumps and reports stale sites', () => {
   const msg = cmdNotify(root, 'student');
   expect(msg).toContain('STALE');
   expect(msg).toContain('a.ts:1');
+});
+test('show lists incoming and outgoing relationships', () => {
+  const e = S.readEntity(root, 'student');
+  e.relationships = ['course'];
+  S.writeEntity(root, e);
+  S.writeEntity(root, { id: 'course', version: 1, hash: 'h', schema: { type: 'object' }, relationships: ['student'] });
+  S.buildIndex(root);
+  const out = cmdShow(root, 'student');
+  expect(out).toContain('Relationships:');
+  expect(out).toContain('course');
+  expect(out).toContain('Referenced by:');
 });
