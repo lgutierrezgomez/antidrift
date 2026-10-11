@@ -22,3 +22,12 @@ test('scanRepo finds tags and skips node_modules and .antidrift', () => {
   const tags = scanRepo(root);
   expect(tags).toEqual([{ id: 'student', version: 3, file: 'a.ts', line: 1 }]);
 });
+test('scanRepo also skips .git and dist', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ad-'));
+  writeFileSync(join(root, 'keep.ts'), '// antidrift #real@1\n');
+  mkdirSync(join(root, '.git'));
+  writeFileSync(join(root, '.git', 'g.ts'), '// antidrift #git@1\n');
+  mkdirSync(join(root, 'dist'));
+  writeFileSync(join(root, 'dist', 'd.ts'), '// antidrift #dist@1\n');
+  expect(scanRepo(root).map((t) => t.id)).toEqual(['real']);
+});

@@ -1,19 +1,19 @@
 #!/usr/bin/env node
 import { fileURLToPath } from 'node:url';
-import { buildIndex, readEntity, reconcileEntity, initStore } from './store.js';
+import { buildIndex, computeIndex, readEntity, reconcileEntity, initStore } from './store.js';
 import { scanRepo } from './scanner.js';
 import { computeDrift, problems } from './drift.js';
 import type { DriftItem } from './types.js';
 
 export function cmdList(root: string): string {
-  const index = buildIndex(root);
+  const index = computeIndex(root);
   if (index.length === 0) return 'No entities. Run `antidrift init`, then add files under .antidrift/entities/.';
   return index.map((e) => `#${e.id}@${e.version}  ${e.title} — ${e.summary}`).join('\n');
 }
 
 export function cmdShow(root: string, id: string): string {
   const e = readEntity(root, id);
-  const drift = computeDrift(scanRepo(root).filter((t) => t.id === id), buildIndex(root));
+  const drift = computeDrift(scanRepo(root).filter((t) => t.id === id), computeIndex(root));
   const sites = drift.map((d) => `  ${d.tag.file}:${d.tag.line}  @${d.tag.version}  [${d.status}]`).join('\n') || '  (no usages tagged)';
   return [`#${e.id}@${e.version}  (hash ${e.hash})`, e.summary, 'Schema:', JSON.stringify(e.schema, null, 2), 'Usages:', sites]
     .filter(Boolean)
@@ -22,7 +22,7 @@ export function cmdShow(root: string, id: string): string {
 
 export function cmdScan(root: string): { report: string; problems: DriftItem[] } {
   const tags = scanRepo(root);
-  const probs = problems(computeDrift(tags, buildIndex(root)));
+  const probs = problems(computeDrift(tags, computeIndex(root)));
   const report =
     probs.length === 0
       ? `Scanned ${tags.length} tag(s). No drift.`

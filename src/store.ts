@@ -60,13 +60,19 @@ export function reconcileEntity(root: string, id: string): Entity {
   return e;
 }
 
-export function buildIndex(root: string): IndexEntry[] {
+/** Pure read: compute the index from entity files without writing anything. */
+export function computeIndex(root: string): IndexEntry[] {
   if (!existsSync(entitiesDir(root))) return [];
-  const index = listEntityIds(root).map((id) => {
+  return listEntityIds(root).map((id) => {
     const e = readEntity(root, id);
     return { id: e.id, title: e.title ?? e.id, version: e.version, hash: e.hash, summary: e.summary ?? '', file: `entities/${id}.json` };
   });
-  writeFileSync(indexPath(root), JSON.stringify(index, null, 2) + '\n');
+}
+
+/** Compute the index AND persist it to index.json. Use after an entity changes. */
+export function buildIndex(root: string): IndexEntry[] {
+  const index = computeIndex(root);
+  if (existsSync(entitiesDir(root))) writeFileSync(indexPath(root), JSON.stringify(index, null, 2) + '\n');
   return index;
 }
 

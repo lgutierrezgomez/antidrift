@@ -1,5 +1,5 @@
 import { test, expect, beforeEach } from 'vitest';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as S from '../src/store.js';
@@ -38,4 +38,10 @@ test('buildIndex lists all entities', () => {
 });
 test('buildIndex returns empty without throwing when no store exists', () => {
   expect(S.buildIndex(root)).toEqual([]);
+});
+test('computeIndex returns entries without writing index.json', () => {
+  S.writeEntity(root, ent({ hash: S.computeHash(ent().schema) }));
+  const idx = S.computeIndex(root);
+  expect(idx.map((e) => e.id)).toEqual(['student']);
+  expect(existsSync(S.indexPath(root))).toBe(false);
 });
