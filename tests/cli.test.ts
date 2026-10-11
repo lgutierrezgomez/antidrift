@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as S from '../src/store.js';
-import { cmdList, cmdScan, cmdNotify, cmdShow } from '../src/cli.js';
+import { cmdList, cmdScan, cmdNotify, cmdShow, cmdImport } from '../src/cli.js';
 import type { Entity } from '../src/types.js';
 
 let root: string;
@@ -47,4 +47,13 @@ test('show lists incoming and outgoing relationships', () => {
   expect(out).toContain('Relationships:');
   expect(out).toContain('course');
   expect(out).toContain('Referenced by:');
+});
+test('import writes entity files and builds the index', () => {
+  writeFileSync(join(root, 's.json'), JSON.stringify({ $defs: { Teacher: { type: 'object' } } }));
+  const msg = cmdImport(root, 'json-schema', join(root, 's.json'));
+  expect(msg).toContain('1');
+  expect(S.listEntityIds(root)).toContain('Teacher');
+});
+test('import rejects an unknown format', () => {
+  expect(() => cmdImport(root, 'xml', join(root, 'x'))).toThrow();
 });

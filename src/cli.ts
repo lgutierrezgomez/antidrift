@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 import { fileURLToPath } from 'node:url';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { buildIndex, computeIndex, readEntity, readAllEntities, reconcileEntity, initStore } from './store.js';
+import { basename } from 'node:path';
+import { buildIndex, computeIndex, readEntity, readAllEntities, writeEntity, reconcileEntity, initStore } from './store.js';
 import { scanRepo } from './scanner.js';
 import { computeDrift, problems } from './drift.js';
 import { computeBrokenRefs, type BrokenRef } from './relationships.js';
 import { commentSyntax } from './comment.js';
+import { IMPORTERS } from './importers.js';
 import type { DriftItem } from './types.js';
 
 export function cmdList(root: string): string {
@@ -85,7 +87,17 @@ export function cmdTag(root: string, id: string, target: string): string {
   return `tagged ${file}:${line} with #${id}@${version}`;
 }
 
-const USAGE = 'usage: antidrift <init|list|show <id>|scan|reconcile <id>|notify <id>|tag <id> <file:line>>';
+export function cmdImport(root: string, format: string, file: string): string {
+  const importer = IMPORTERS[format];
+  if (!importer) throw new Error(`unknown import format: ${format} (have: ${Object.keys(IMPORTERS).join(', ')})`);
+  const entities = importer(readFileSync(file, 'utf8'), basename(file).replace(/\.[^.]+$/, ''));
+  for (const e of entities) writeEntity(root, e);
+  buildIndex(root);
+  return `imported ${entities.length} entity file(s) from ${file}`;
+}
+
+const USAGE =
+  'usage: antidrift <init|list|show <id>|scan|reconcile <id>|notify <id>|tag <id> <file:line>|import <format> <file>>';
 function requireArg(arg: string | undefined, what: string): string {
   if (!arg) throw new Error(`missing <${what}>. ${USAGE}`);
   return arg;
@@ -120,6 +132,9 @@ function main(): void {
         break;
       case 'tag':
         console.log(cmdTag(root, requireArg(arg, 'id'), requireArg(process.argv[4], 'file:line')));
+        break;
+      case 'import':
+        console.log(cmdImport(root, requireArg(arg, 'format'), requireArg(process.argv[4], 'file')));
         break;
       default:
         console.error(USAGE);
