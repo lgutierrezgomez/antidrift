@@ -15,7 +15,14 @@ export const tsEmitter: Emitter = {
   async emit(entities) {
     const parts: string[] = [];
     for (const e of entities) {
-      parts.push(await compile(e.schema as object, pascal(e.id), { bannerComment: '', additionalProperties: false }));
+      parts.push(
+        await compile(e.schema as object, pascal(e.id), {
+          bannerComment: '',
+          additionalProperties: false,
+          // Never resolve external refs — importer input is untrusted (no file read / SSRF).
+          $refOptions: { resolve: { file: false, http: false } },
+        }),
+      );
     }
     return parts.join('\n');
   },

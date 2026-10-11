@@ -1,11 +1,26 @@
 import { load as yamlLoad } from 'js-yaml';
 import { parse, Kind } from 'graphql';
 export const sanitizeId = (s) => s.replace(/[^A-Za-z0-9_.-]/g, '-');
+/** Replace any `$ref` node with a self-contained schema. Internal refs would break
+ * per-entity compilation; external refs (file://, http://) would leak on resolution. */
+export function stripRefs(node) {
+    if (Array.isArray(node))
+        return node.map(stripRefs);
+    if (node && typeof node === 'object') {
+        if ('$ref' in node)
+            return { type: 'object' };
+        const out = {};
+        for (const [k, v] of Object.entries(node))
+            out[k] = stripRefs(v);
+        return out;
+    }
+    return node;
+}
 const mk = (id, schema, relationships = []) => ({
     id: sanitizeId(id),
     version: 1,
     hash: '',
-    schema,
+    schema: stripRefs(schema),
     ...(relationships.length ? { relationships } : {}),
 });
 export const importJsonSchema = (src, name) => {

@@ -29,10 +29,13 @@ export function initStore(root) {
     if (!existsSync(indexPath(root)))
         writeFileSync(indexPath(root), '[]\n');
 }
-export function writeEntity(root, entity) {
-    if (!ajv.validateSchema(entity.schema)) {
-        throw new Error(`Invalid JSON Schema for "${entity.id}": ${ajv.errorsText(ajv.errors)}`);
+export function assertValidSchema(id, schema) {
+    if (!ajv.validateSchema(schema)) {
+        throw new Error(`Invalid JSON Schema for "${id}": ${ajv.errorsText(ajv.errors)}`);
     }
+}
+export function writeEntity(root, entity) {
+    assertValidSchema(entity.id, entity.schema);
     mkdirSync(entitiesDir(root), { recursive: true });
     writeFileSync(entityPath(root, entity.id), JSON.stringify(entity, null, 2) + '\n');
 }

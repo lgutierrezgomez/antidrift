@@ -2,7 +2,7 @@
 import { fileURLToPath } from 'node:url';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import { buildIndex, computeIndex, readEntity, readAllEntities, writeEntity, reconcileEntity, initStore, storeDir } from './store.js';
+import { buildIndex, computeIndex, readEntity, readAllEntities, writeEntity, assertValidSchema, reconcileEntity, initStore, storeDir } from './store.js';
 import { scanRepo } from './scanner.js';
 import { computeDrift, problems } from './drift.js';
 import { computeBrokenRefs } from './relationships.js';
@@ -82,6 +82,9 @@ export function cmdImport(root, format, file) {
     if (!importer)
         throw new Error(`unknown import format: ${format} (have: ${Object.keys(IMPORTERS).join(', ')})`);
     const entities = importer(readFileSync(file, 'utf8'), basename(file).replace(/\.[^.]+$/, ''));
+    // Validate all schemas before writing any — import is all-or-nothing.
+    for (const e of entities)
+        assertValidSchema(e.id, e.schema);
     for (const e of entities)
         writeEntity(root, e);
     buildIndex(root);

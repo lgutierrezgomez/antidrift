@@ -57,3 +57,21 @@ test('graphql importer maps object types and object-field relationships', () => 
   expect(s.schema.required).toEqual(['id']);
   expect(s.relationships).toEqual(['Course']);
 });
+test('importers strip $refs from stored schemas but keep relationships', () => {
+  const src = `
+openapi: 3.0.0
+components:
+  schemas:
+    Student:
+      type: object
+      properties:
+        course: { $ref: '#/components/schemas/Course' }
+    Course:
+      type: object`;
+  const student = importOpenApi(src, 'api').find((e) => e.id === 'Student')!;
+  expect(JSON.stringify(student.schema)).not.toContain('$ref');
+  expect(student.relationships).toEqual(['Course']);
+});
+test('importJsonSchema throws on malformed input', () => {
+  expect(() => importJsonSchema('not json at all', 'x')).toThrow();
+});

@@ -6,6 +6,7 @@ export declare const ID_RE: RegExp;
 export declare const entityPath: (root: string, id: string) => string;
 export declare function computeHash(schema: Record<string, unknown>): string;
 export declare function initStore(root: string): void;
+export declare function assertValidSchema(id: string, schema: Record<string, unknown>): void;
 export declare function writeEntity(root: string, entity: Entity): void;
 export declare const readEntity: (root: string, id: string) => Entity;
 export declare function listEntityIds(root: string): string[];

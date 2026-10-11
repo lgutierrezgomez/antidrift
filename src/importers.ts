@@ -6,11 +6,24 @@ export type Importer = (src: string, name: string) => Entity[];
 
 export const sanitizeId = (s: string) => s.replace(/[^A-Za-z0-9_.-]/g, '-');
 
+/** Replace any `$ref` node with a self-contained schema. Internal refs would break
+ * per-entity compilation; external refs (file://, http://) would leak on resolution. */
+export function stripRefs(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(stripRefs);
+  if (node && typeof node === 'object') {
+    if ('$ref' in (node as Record<string, unknown>)) return { type: 'object' };
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(node)) out[k] = stripRefs(v);
+    return out;
+  }
+  return node;
+}
+
 const mk = (id: string, schema: Record<string, unknown>, relationships: string[] = []): Entity => ({
   id: sanitizeId(id),
   version: 1,
   hash: '',
-  schema,
+  schema: stripRefs(schema) as Record<string, unknown>,
   ...(relationships.length ? { relationships } : {}),
 });
 

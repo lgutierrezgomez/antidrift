@@ -64,3 +64,8 @@ test('gen-types writes a ts file with an interface', async () => {
   expect(existsSync(dest)).toBe(true);
   expect(readFileSync(dest, 'utf8')).toMatch(/interface Student/);
 });
+test('import is all-or-nothing: a bad schema aborts without partial writes', () => {
+  writeFileSync(join(root, 'bad.json'), JSON.stringify({ $defs: { Good: { type: 'object' }, Bad: { type: 'bogus' } } }));
+  expect(() => cmdImport(root, 'json-schema', join(root, 'bad.json'))).toThrow();
+  expect(S.listEntityIds(root)).not.toContain('Good');
+});
