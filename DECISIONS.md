@@ -31,6 +31,24 @@ missing-CLI-arg prints a raw stack instead of usage; CLI id not validated vs tag
 (path-traversal on show/reconcile, low impact since the agent already has file read); loose hook
 case-glob; a couple of thin tests. All logged in `.superpowers/sdd/2026-10-11-antidrift/progress.md`.
 
-## Needs your input (skipped — no safe default)
-- **Publishing:** repo is built and committed locally on `master`; I did NOT create a GitHub repo
-  or push (external side effect + you were away). When you're back, decide where to publish it.
+## Wave 2 (robustness+tag, relationships, importers, type-gen)
+Shipped all four; 45 tests, clean build, pushed to GitHub. Decisions:
+- **js-yaml v5 is ESM-only** — imported as `{ load as yamlLoad }` (no default export). `load()` is
+  safe-by-default (default schema), despite the Python-oriented security hook warning.
+- **Prisma light parser** (no `@prisma/internals`): reads **one field per line** (the enforced
+  Prisma format); enums/composite types/unsupported attributes are skipped.
+- **Security fixes from review:** imported schemas **strip all `$ref` nodes** (internal refs would
+  crash gen-types; external `file://`/`http://` refs would leak local files via the type generator),
+  and the TS emitter disables external ref resolution. Import is now **all-or-nothing** (validates
+  every schema before writing any).
+- **New deps:** `js-yaml`, `graphql`, `json-schema-to-typescript`.
+
+### Deferred minors (reviewer confirmed none are live bugs; your call)
+- Prisma skipped-field notes aren't surfaced in import output; GraphQL custom-scalar fields are
+  dropped silently; `tag` with a target missing `:line` gives a confusing ENOENT; `entityPath`
+  allows dot-only ids (`.`/`..`) — odd filenames, not traversal; the `show` incoming-relationship
+  test is weak; dead `SLASH` set in comment.ts; `@types/js-yaml` v4 vs runtime v5.
+
+## Done — publishing
+- **On GitHub (private):** https://github.com/lgutierrezgomez/antidrift (wave 1 + wave 2 pushed).
+- **Still your call:** flip the repo to **public** and publish to the plugin **marketplace** when ready.

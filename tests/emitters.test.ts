@@ -17,3 +17,10 @@ test('ts emitter does not resolve external file:// refs (no leak)', async () => 
   const bad: Entity[] = [{ id: 'leak', version: 1, hash: 'h', schema: { $ref: 'file:///etc/hostname' } }];
   await expect((async () => EMITTERS.get('ts')!.emit(bad))()).rejects.toThrow();
 });
+test('ts emitter ignores code-emitting keywords (tsType) in schemas', async () => {
+  const ents: Entity[] = [
+    { id: 'x', version: 1, hash: 'h', schema: { type: 'object', properties: { f: { tsType: 'InjectedEvil' } } } },
+  ];
+  const out = await EMITTERS.get('ts')!.emit(ents);
+  expect(out).not.toContain('InjectedEvil');
+});
