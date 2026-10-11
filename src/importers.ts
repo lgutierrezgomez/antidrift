@@ -1,3 +1,4 @@
+import { load as yamlLoad } from 'js-yaml';
 import type { Entity } from './types.js';
 
 export type Importer = (src: string, name: string) => Entity[];
@@ -19,4 +20,32 @@ export const importJsonSchema: Importer = (src, name) => {
   return [mk(name, doc)];
 };
 
-export const IMPORTERS: Record<string, Importer> = { 'json-schema': importJsonSchema };
+function collectRefs(node: unknown, out: Set<string>): void {
+  if (Array.isArray(node)) node.forEach((n) => collectRefs(n, out));
+  else if (node && typeof node === 'object') {
+    for (const [k, v] of Object.entries(node)) {
+      if (k === '$ref' && typeof v === 'string') {
+        const m = v.match(/\/([^/]+)$/);
+        if (m) out.add(m[1]);
+      } else collectRefs(v, out);
+    }
+  }
+}
+
+export const importOpenApi: Importer = (src) => {
+  const doc = (src.trimStart().startsWith('{') ? JSON.parse(src) : yamlLoad(src)) as {
+    components?: { schemas?: Record<string, Record<string, unknown>> };
+  };
+  const schemas = doc?.components?.schemas ?? {};
+  return Object.entries(schemas).map(([id, schema]) => {
+    const refs = new Set<string>();
+    collectRefs(schema, refs);
+    refs.delete(id);
+    return mk(id, schema, [...refs].map(sanitizeId));
+  });
+};
+
+export const IMPORTERS: Record<string, Importer> = {
+  'json-schema': importJsonSchema,
+  openapi: importOpenApi,
+};
