@@ -1,0 +1,5 @@
+{
+  "name": "antidrift",
+  "version": "0.1.0",
+  "description": "Single-source-of-truth registry + drift tracking for data entities."
+}
