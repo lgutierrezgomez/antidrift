@@ -1,5 +1,5 @@
 import { test, expect } from 'vitest';
-import { importJsonSchema, importOpenApi, importPrisma, sanitizeId } from '../src/importers.js';
+import { importJsonSchema, importOpenApi, importPrisma, importGraphql, sanitizeId } from '../src/importers.js';
 
 test('sanitizeId coerces illegal chars', () => {
   expect(sanitizeId('User Role!')).toBe('User-Role-');
@@ -48,5 +48,12 @@ model Course { id Int @id }`;
     properties: { id: { type: 'integer' }, name: { type: 'string' }, bio: { type: 'string' }, tags: { type: 'array', items: { type: 'string' } } },
   });
   expect(s.schema.required).toEqual(['id', 'name']);
+  expect(s.relationships).toEqual(['Course']);
+});
+test('graphql importer maps object types and object-field relationships', () => {
+  const src = `type Student { id: ID! name: String bio: String course: Course } type Course { id: ID! }`;
+  const s = importGraphql(src, 'schema').find((e) => e.id === 'Student')!;
+  expect(s.schema).toMatchObject({ type: 'object', properties: { id: { type: 'string' }, name: { type: 'string' } } });
+  expect(s.schema.required).toEqual(['id']);
   expect(s.relationships).toEqual(['Course']);
 });

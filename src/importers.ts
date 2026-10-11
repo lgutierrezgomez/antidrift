@@ -1,4 +1,5 @@
 import { load as yamlLoad } from 'js-yaml';
+import { parse, Kind, type TypeNode } from 'graphql';
 import type { Entity } from './types.js';
 
 export type Importer = (src: string, name: string) => Entity[];
@@ -83,8 +84,54 @@ export const importPrisma: Importer = (src) => {
   });
 };
 
+const GQL_SCALAR: Record<string, string> = { String: 'string', ID: 'string', Int: 'integer', Float: 'number', Boolean: 'boolean' };
+
+function unwrapGql(t: TypeNode): { name: string; required: boolean; list: boolean } {
+  let required = false;
+  let list = false;
+  let node: TypeNode = t;
+  if (node.kind === Kind.NON_NULL_TYPE) {
+    required = true;
+    node = node.type;
+  }
+  if (node.kind === Kind.LIST_TYPE) {
+    list = true;
+    node = node.type;
+    if (node.kind === Kind.NON_NULL_TYPE) node = node.type;
+  }
+  return { name: node.kind === Kind.NAMED_TYPE ? node.name.value : '', required, list };
+}
+
+export const importGraphql: Importer = (src) => {
+  const doc = parse(src);
+  const objs = doc.definitions.filter(
+    (d) => d.kind === Kind.OBJECT_TYPE_DEFINITION || d.kind === Kind.INPUT_OBJECT_TYPE_DEFINITION,
+  ) as Array<{ name: { value: string }; fields?: ReadonlyArray<{ name: { value: string }; type: TypeNode }> }>;
+  const names = new Set(objs.map((d) => d.name.value));
+  return objs.map((def) => {
+    const properties: Record<string, unknown> = {};
+    const required: string[] = [];
+    const relationships: string[] = [];
+    for (const f of def.fields ?? []) {
+      const u = unwrapGql(f.type);
+      if (names.has(u.name)) {
+        relationships.push(sanitizeId(u.name));
+        continue;
+      }
+      const js = GQL_SCALAR[u.name];
+      if (!js) continue;
+      properties[f.name.value] = u.list ? { type: 'array', items: { type: js } } : { type: js };
+      if (u.required && !u.list) required.push(f.name.value);
+    }
+    const schema: Record<string, unknown> = { type: 'object', properties };
+    if (required.length) schema.required = required;
+    return mk(def.name.value, schema, relationships);
+  });
+};
+
 export const IMPORTERS: Record<string, Importer> = {
   'json-schema': importJsonSchema,
   openapi: importOpenApi,
   prisma: importPrisma,
+  graphql: importGraphql,
 };
