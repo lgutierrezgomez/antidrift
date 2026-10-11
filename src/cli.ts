@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 import { fileURLToPath } from 'node:url';
-import { readFileSync, writeFileSync } from 'node:fs';
-import { basename } from 'node:path';
-import { buildIndex, computeIndex, readEntity, readAllEntities, writeEntity, reconcileEntity, initStore } from './store.js';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
+import { buildIndex, computeIndex, readEntity, readAllEntities, writeEntity, reconcileEntity, initStore, storeDir } from './store.js';
 import { scanRepo } from './scanner.js';
 import { computeDrift, problems } from './drift.js';
 import { computeBrokenRefs, type BrokenRef } from './relationships.js';
 import { commentSyntax } from './comment.js';
 import { IMPORTERS } from './importers.js';
+import { EMITTERS } from './emitters.js';
 import type { DriftItem } from './types.js';
 
 export function cmdList(root: string): string {
@@ -96,14 +97,24 @@ export function cmdImport(root: string, format: string, file: string): string {
   return `imported ${entities.length} entity file(s) from ${file}`;
 }
 
+export async function cmdGenTypes(root: string, lang = 'ts', out?: string): Promise<string> {
+  const emitter = EMITTERS.get(lang);
+  if (!emitter) throw new Error(`unknown emitter lang: ${lang} (have: ${[...EMITTERS.keys()].join(', ')})`);
+  const code = await emitter.emit(readAllEntities(root));
+  const dest = out ?? join(storeDir(root), 'generated', `types.${emitter.ext}`);
+  mkdirSync(dirname(dest), { recursive: true });
+  writeFileSync(dest, code);
+  return `wrote ${dest}`;
+}
+
 const USAGE =
-  'usage: antidrift <init|list|show <id>|scan|reconcile <id>|notify <id>|tag <id> <file:line>|import <format> <file>>';
+  'usage: antidrift <init|list|show <id>|scan|reconcile <id>|notify <id>|tag <id> <file:line>|import <format> <file>|gen-types [lang] [out]>';
 function requireArg(arg: string | undefined, what: string): string {
   if (!arg) throw new Error(`missing <${what}>. ${USAGE}`);
   return arg;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const [cmd, arg] = process.argv.slice(2);
   const root = process.cwd();
   try {
@@ -136,6 +147,9 @@ function main(): void {
       case 'import':
         console.log(cmdImport(root, requireArg(arg, 'format'), requireArg(process.argv[4], 'file')));
         break;
+      case 'gen-types':
+        console.log(await cmdGenTypes(root, arg ?? 'ts', process.argv[4]));
+        break;
       default:
         console.error(USAGE);
         process.exit(2);
@@ -146,4 +160,9 @@ function main(): void {
   }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) main();
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((e) => {
+    console.error('antidrift: ' + (e as Error).message);
+    process.exit(2);
+  });
+}

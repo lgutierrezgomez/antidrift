@@ -3,7 +3,8 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as S from '../src/store.js';
-import { cmdList, cmdScan, cmdNotify, cmdShow, cmdImport } from '../src/cli.js';
+import { cmdList, cmdScan, cmdNotify, cmdShow, cmdImport, cmdGenTypes } from '../src/cli.js';
+import { existsSync, readFileSync } from 'node:fs';
 import type { Entity } from '../src/types.js';
 
 let root: string;
@@ -56,4 +57,10 @@ test('import writes entity files and builds the index', () => {
 });
 test('import rejects an unknown format', () => {
   expect(() => cmdImport(root, 'xml', join(root, 'x'))).toThrow();
+});
+test('gen-types writes a ts file with an interface', async () => {
+  const dest = join(root, 'out.ts');
+  await cmdGenTypes(root, 'ts', dest);
+  expect(existsSync(dest)).toBe(true);
+  expect(readFileSync(dest, 'utf8')).toMatch(/interface Student/);
 });
