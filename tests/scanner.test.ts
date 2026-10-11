@@ -1,5 +1,5 @@
 import { test, expect } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseTags, scanRepo } from '../src/scanner.js';
@@ -30,4 +30,12 @@ test('scanRepo also skips .git and dist', () => {
   mkdirSync(join(root, 'dist'));
   writeFileSync(join(root, 'dist', 'd.ts'), '// antidrift #dist@1\n');
   expect(scanRepo(root).map((t) => t.id)).toEqual(['real']);
+});
+test('scanRepo does not follow symlinks and skips >2MB files', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ad-'));
+  writeFileSync(join(root, 'ok.ts'), '// antidrift #a@1\n');
+  writeFileSync(join(root, 'big.ts'), '// antidrift #big@1\n' + 'x'.repeat(2 * 1024 * 1024 + 1));
+  writeFileSync(join(root, 'real.ts'), '// antidrift #link@1\n');
+  symlinkSync(join(root, 'real.ts'), join(root, 'link.ts'));
+  expect(scanRepo(root).map((t) => t.id).sort()).toEqual(['a', 'link']);
 });
