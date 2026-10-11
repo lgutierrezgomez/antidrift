@@ -1,0 +1,6 @@
+---
+description: Generate antidrift entities from an external schema
+allowed-tools: Bash(node:*)
+argument-hint: <json-schema|openapi|prisma|graphql> <file>
+---
+Run `node ${CLAUDE_PLUGIN_ROOT}/dist/cli.js import $ARGUMENTS` to create one entity file per type from a JSON Schema, OpenAPI, Prisma, or GraphQL SDL source, then report what was imported.

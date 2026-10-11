@@ -68,10 +68,35 @@ stale, you re-read the one entity and decide whether the code still fits.
 |---|---|
 | `/antidrift:init` | Create `.antidrift/`; then (guided by the skill) author entities for an existing project |
 | `/antidrift:list` | Print the entity index (id, version, summary) |
-| `/antidrift:show <id>` | Print one entity's schema + its usage sites, with stale ones marked |
-| `/antidrift:scan` | Scan the repo for drift; exits non-zero if any stale/orphan usage (CI-friendly) |
+| `/antidrift:show <id>` | Print one entity's schema, usage sites (stale marked), and relationships (outgoing + incoming) |
+| `/antidrift:scan` | Scan the repo for drift; exits non-zero on any stale/orphan usage **or broken relationship** (CI-friendly) |
+| `/antidrift:tag <id> <file:line>` | Insert `#<id>@<version>` at a code location, in the file's comment syntax |
+| `/antidrift:import <format> <file>` | Generate entities from a **json-schema / openapi / prisma / graphql** source |
+| `/antidrift:gen-types [lang] [out]` | Emit shared types from the entity schemas (TypeScript by default) |
 
-The CLI behind them: `node dist/cli.js <init|list|show <id>|scan|reconcile <id>|notify <id>>`.
+The CLI behind them: `node dist/cli.js <init|list|show <id>|scan|reconcile <id>|notify <id>|tag <id> <file:line>|import <format> <file>|gen-types [lang] [out]>`.
+
+## Relationships
+
+An entity's `relationships: ["course", ...]` lists the entity ids it references. A relationship id
+that isn't a known entity is a **`broken-ref`** — reported by `scan` (and non-zero exit). `show`
+prints an entity's outgoing relationships (broken ones marked) and which entities reference it.
+
+## Importers
+
+`import <format> <file>` bootstraps entities from an existing source — one entity per type, at
+version 1:
+- **json-schema** — `$defs`/`definitions`, or the whole doc as one entity.
+- **openapi** — `components.schemas`; `$ref`s become relationships.
+- **prisma** — `model` blocks (scalars → properties, `?`/`[]` honored, relations → relationships).
+  Parsed by a light in-repo parser; enums/composite types are skipped.
+- **graphql** — `type`/`input` definitions; object-typed fields become relationships.
+
+## Type generation
+
+`gen-types` emits shared types from the entity schemas via a pluggable emitter registry. The
+**TypeScript** emitter ships (`--lang ts`, default), writing `.antidrift/generated/types.ts` — a
+regenerable build output. Add emitters for other languages by registering them in the map.
 
 ## Change notification
 

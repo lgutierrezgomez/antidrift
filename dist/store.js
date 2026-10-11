@@ -6,7 +6,12 @@ const ajv = new Ajv({ strict: false });
 export const storeDir = (root) => join(root, '.antidrift');
 export const entitiesDir = (root) => join(storeDir(root), 'entities');
 export const indexPath = (root) => join(storeDir(root), 'index.json');
-export const entityPath = (root, id) => join(entitiesDir(root), `${id}.json`);
+export const ID_RE = /^[A-Za-z0-9_.-]+$/;
+export const entityPath = (root, id) => {
+    if (!id || !ID_RE.test(id))
+        throw new Error(`Invalid entity id: ${JSON.stringify(id)}`);
+    return join(entitiesDir(root), `${id}.json`);
+};
 function canonical(v) {
     if (Array.isArray(v))
         return `[${v.map(canonical).join(',')}]`;
@@ -71,3 +76,4 @@ export function buildIndex(root) {
 export function readIndex(root) {
     return existsSync(indexPath(root)) ? JSON.parse(readFileSync(indexPath(root), 'utf8')) : [];
 }
+export const readAllEntities = (root) => listEntityIds(root).map((id) => readEntity(root, id));
