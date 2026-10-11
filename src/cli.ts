@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { fileURLToPath } from 'node:url';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { buildIndex, computeIndex, readEntity, reconcileEntity, initStore } from './store.js';
+import { buildIndex, computeIndex, readEntity, readAllEntities, reconcileEntity, initStore } from './store.js';
 import { scanRepo } from './scanner.js';
 import { computeDrift, problems } from './drift.js';
+import { computeBrokenRefs, type BrokenRef } from './relationships.js';
 import { commentSyntax } from './comment.js';
 import type { DriftItem } from './types.js';
 
@@ -22,21 +23,23 @@ export function cmdShow(root: string, id: string): string {
     .join('\n');
 }
 
-export function cmdScan(root: string): { report: string; problems: DriftItem[] } {
+export function cmdScan(root: string): { report: string; problems: DriftItem[]; brokenRefs: BrokenRef[] } {
+  const index = computeIndex(root);
   const tags = scanRepo(root);
-  const probs = problems(computeDrift(tags, computeIndex(root)));
+  const probs = problems(computeDrift(tags, index));
+  const brokenRefs = computeBrokenRefs(readAllEntities(root), new Set(index.map((e) => e.id)));
+  const total = probs.length + brokenRefs.length;
+  const lines = [
+    ...probs.map(
+      (d) =>
+        `  ${d.tag.file}:${d.tag.line}  #${d.tag.id}@${d.tag.version} -> ${d.status}` +
+        (d.currentVersion !== null ? ` (current @${d.currentVersion})` : ''),
+    ),
+    ...brokenRefs.map((b) => `  #${b.entity} -> #${b.ref} [broken-ref]`),
+  ];
   const report =
-    probs.length === 0
-      ? `Scanned ${tags.length} tag(s). No drift.`
-      : `Scanned ${tags.length} tag(s). ${probs.length} problem(s):\n` +
-        probs
-          .map(
-            (d) =>
-              `  ${d.tag.file}:${d.tag.line}  #${d.tag.id}@${d.tag.version} -> ${d.status}` +
-              (d.currentVersion !== null ? ` (current @${d.currentVersion})` : ''),
-          )
-          .join('\n');
-  return { report, problems: probs };
+    total === 0 ? `Scanned ${tags.length} tag(s). No drift.` : `Scanned ${tags.length} tag(s). ${total} problem(s):\n` + lines.join('\n');
+  return { report, problems: probs, brokenRefs };
 }
 
 export function cmdNotify(root: string, id: string): string {
@@ -87,7 +90,7 @@ function main(): void {
       case 'scan': {
         const r = cmdScan(root);
         console.log(r.report);
-        process.exit(r.problems.length ? 1 : 0);
+        process.exit(r.problems.length + r.brokenRefs.length ? 1 : 0);
         break;
       }
       case 'reconcile':

@@ -83,3 +83,5 @@ export function buildIndex(root: string): IndexEntry[] {
 export function readIndex(root: string): IndexEntry[] {
   return existsSync(indexPath(root)) ? (JSON.parse(readFileSync(indexPath(root), 'utf8')) as IndexEntry[]) : [];
 }
+
+export const readAllEntities = (root: string): Entity[] => listEntityIds(root).map((id) => readEntity(root, id));
