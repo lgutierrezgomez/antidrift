@@ -1,5 +1,13 @@
 {
   "name": "antidrift",
   "version": "0.1.0",
-  "description": "Single-source-of-truth registry + drift tracking for data entities."
+  "description": "Single-source-of-truth registry + drift tracking for data entities. Describe entities once in JSON Schema; keep front, back, and AI agents in sync and flag drift.",
+  "author": {
+    "name": "Leonardo Gutiérrez Gómez",
+    "url": "https://github.com/lgutierrezgomez"
+  },
+  "homepage": "https://github.com/lgutierrezgomez/antidrift",
+  "repository": "https://github.com/lgutierrezgomez/antidrift",
+  "license": "MIT",
+  "keywords": ["schema", "json-schema", "drift", "single-source-of-truth", "entities", "agents", "codegen"]
 }

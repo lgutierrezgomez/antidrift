@@ -1,0 +1,15 @@
+{
+  "name": "antidrift",
+  "description": "antidrift — single-source-of-truth entity registry + drift tracking for AI-assisted development.",
+  "owner": {
+    "name": "Leonardo Gutiérrez Gómez",
+    "url": "https://github.com/lgutierrezgomez"
+  },
+  "plugins": [
+    {
+      "name": "antidrift",
+      "source": "./",
+      "description": "Describe data entities once in JSON Schema; keep front, back, and agents in sync and flag drift. Commands: list, show, scan, init, tag, import (json-schema/openapi/prisma/graphql), gen-types."
+    }
+  ]
+}

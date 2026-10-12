@@ -14,15 +14,22 @@ definition changes.
 
 ## Install (Claude Code plugin)
 
-Clone this repo into your Claude Code plugins directory (it ships compiled `dist/`, so no build
-step is required):
+One step, on Claude Code 2.1.275 or later:
 
 ```
-git clone <repo-url> ~/.claude/plugins/antidrift
+/plugin install antidrift --marketplace lgutierrezgomez/antidrift
 ```
 
-The plugin registers four slash commands and a change-notification hook. (For development: `npm
-install && npm run build && npm test`.)
+Or the two-step form (any version):
+
+```
+/plugin marketplace add lgutierrezgomez/antidrift
+/plugin install antidrift@antidrift
+```
+
+It ships compiled `dist/`, so there's no build step on install. The plugin registers the slash
+commands below, a change-notification hook, and a skill. (For development: `npm install && npm run
+build && npm test`.)
 
 ## The store: `.antidrift/`
 
