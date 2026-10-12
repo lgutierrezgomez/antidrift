@@ -1,5 +1,6 @@
 {
   "name": "antidrift",
+  "displayName": "antidrift",
   "version": "0.1.0",
   "description": "Single-source-of-truth registry + drift tracking for data entities. Describe entities once in JSON Schema; keep front, back, and AI agents in sync and flag drift.",
   "author": {

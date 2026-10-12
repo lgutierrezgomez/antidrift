@@ -113,6 +113,21 @@ version, recomputes the hash, and injects a reminder into the agent's next step 
 and revalidate."* Notification is between-steps (an LLM can't be interrupted mid-generation); it is
 a loud reminder plus a stale list, not a file lock.
 
+## Transparency — what it runs
+
+antidrift runs **entirely on your machine** and makes **no network calls and sends no telemetry** —
+nothing leaves your computer.
+
+- The slash commands and the PostToolUse hook invoke a local Node CLI (`dist/cli.js`) over your
+  repo's files only.
+- `gen-types` uses `json-schema-to-typescript` with external reference resolution **disabled**
+  (`$refOptions.resolve.file/http = false`), so it never reads files outside your schemas or makes
+  HTTP requests; imported schemas also have all `$ref`s stripped.
+- Runtime dependencies (`ajv`, `js-yaml`, `graphql`, `json-schema-to-typescript`) are installed from
+  the committed `package-lock.json` on install.
+- The repo ships both the TypeScript **source** (`src/`) and its compiled output (`dist/`, committed
+  so the plugin runs with no build step).
+
 ## Not in scope (v1)
 
 Code generation, semantic code-vs-schema verification, auto-inserting comments, importers for
