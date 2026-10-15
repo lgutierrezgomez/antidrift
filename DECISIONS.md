@@ -4,7 +4,7 @@ Judgment calls I made while building autonomously (you were AFK). Review at leis
 nothing here blocks you. Full execution record is in `.superpowers/sdd/2026-10-11-antidrift/progress.md`.
 
 ## Guesses / rulings made
-- **Git branch:** building on `main` of this brand-new repo (no feature branch/worktree).
+- **Git branch:** building on `master` (the default branch) of this brand-new repo (no feature branch/worktree).
   Reason: greenfield project — nothing shared to isolate from. Reversible anytime.
 - **First reconcile keeps version 1 (not 2).** The plan flagged this as optional. An entity
   authored with an empty `hash` now gets *stamped* (hash filled) without bumping, so a new

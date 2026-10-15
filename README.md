@@ -3,7 +3,7 @@
 A **single-source-of-truth registry + drift tracker** for your data entities, shipped as a
 **Claude Code plugin**. Describe each entity once in JSON Schema; both front and back (and any
 AI agent) refer to the same definition, and antidrift flags the code that falls out of sync when
-an entity changes. Language-agnostic. No code generation.
+an entity changes. Language-agnostic. Type generation is opt-in (`gen-types`); nothing else is generated.
 
 ## Why
 
@@ -130,6 +130,8 @@ nothing leaves your computer.
 
 ## Not in scope (v1)
 
-Code generation, semantic code-vs-schema verification, auto-inserting comments, importers for
-Prisma/OpenAPI/GraphQL, multi-repo, and the design-system (tokens/components) extension — see
-`docs/superpowers/specs/2026-10-11-antidrift-design.md`.
+Generating application code (beyond the opt-in shared types from `gen-types`), semantic
+code-vs-schema verification, auto-inserting comments without the agent, multi-repo, and the
+design-system (tokens/components) extension — see
+`docs/superpowers/specs/2026-10-11-antidrift-design.md`. (Importers, relationships, `tag`, and
+`gen-types` shipped in wave 2 — `docs/superpowers/specs/2026-10-11-antidrift-wave2-design.md`.)
