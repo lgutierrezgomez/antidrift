@@ -10,12 +10,22 @@ front and back. Follow these rules whenever you touch entity-shaped code.
 - **Discover entities first.** Run `/antidrift:list` (or read `.antidrift/index.json`) to see
   what exists. To work on one entity, read ONLY `.antidrift/entities/<id>.json` — do not load
   the whole store into context.
-- **Tag every usage.** When you write or edit code that uses an entity, add a comment
-  `antidrift #<id>@<version>` (inside the file's own comment syntax) using the entity's current
-  version. Front and back must tag against the same entity id.
+- **Tag every file that uses an entity — once.** When you write or edit code that uses an entity,
+  add a comment `antidrift #<id>@<version>` (inside the file's own comment syntax) using the
+  entity's current version. One tag per file per entity is enough; don't tag every line. Front and
+  back must tag against the same entity id.
 - **On a stale reminder.** If a hook tells you an entity changed and usage sites are stale,
   re-read `.antidrift/entities/<id>.json`, update the affected code, and bump the tag's
   `@version` to the new version.
+- **API responses and other projections.** A shape built from an entity (a response type, a list
+  row, a report) is its own entity with `"derivedFrom": { "<base-id>": <base-version> }`. Never
+  hand-write it in an `api.ts` without declaring it. If a hook or `scan` says a projection is stale,
+  re-read the base, update the projection's `schema` if it needs to follow, then set its
+  `derivedFrom.<base-id>` to the base's current version.
+- **What goes in an entity.** The contract consumers rely on. Leave out DB-internal columns (join
+  keys, import/dedupe keys, hashes, bookkeeping timestamps) unless a consumer reads them; put
+  computed fields in the projection that exposes them. Any `schema` edit bumps the version, even
+  an additive one.
 - **Changing an entity.** Edit `.antidrift/entities/<id>.json`; the hook reconciles its version
   and flags stale usages. Never hand-edit the `version` field — the tool owns it.
 - **Bootstrapping.** Prefer `/antidrift:import <json-schema|openapi|prisma|graphql> <file>` to
@@ -28,7 +38,9 @@ front and back. Follow these rules whenever you touch entity-shaped code.
 - **Inserting a tag.** `/antidrift:tag <id> <file:line>` adds the usage comment for you in the
   file's comment syntax, using the entity's current version.
 - **Shared types.** `/antidrift:gen-types` emits types from the schemas so front and back import
-  identical definitions.
+  identical definitions, plus a values-only `*.enums.ts`. Front-end code that needs only enum values
+  imports the enums file — never the validator. For runtime validation, use Ajv's 2020-12 build
+  (`Ajv2020` from `ajv/dist/2020.js`); see the README's "Validating at runtime" section.
 
 antidrift flags drift; it does not verify that your code matches the schema. When a site is
 stale, YOU re-read the entity and decide whether the code still fits.

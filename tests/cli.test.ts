@@ -69,3 +69,14 @@ test('import is all-or-nothing: a bad schema aborts without partial writes', () 
   expect(() => cmdImport(root, 'json-schema', join(root, 'bad.json'))).toThrow();
   expect(S.listEntityIds(root)).not.toContain('Good');
 });
+test('gen-types also writes a values-only enums file next to the types', async () => {
+  const e = S.readEntity(root, 'student');
+  e.schema = { type: 'object', properties: { level: { enum: ['junior', 'senior'] } } };
+  S.writeEntity(root, e);
+  const dest = join(root, 'out', 'generated.ts');
+  const msg = await cmdGenTypes(root, 'ts', dest);
+  const enums = join(root, 'out', 'generated.enums.ts');
+  expect(msg).toContain(enums);
+  expect(readFileSync(enums, 'utf8')).toContain('export const STUDENT_LEVEL = ["junior","senior"] as const;');
+  expect(readFileSync(enums, 'utf8')).not.toMatch(/import|ajv/i);
+});

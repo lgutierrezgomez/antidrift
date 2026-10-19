@@ -5,7 +5,7 @@ import { basename, dirname, join } from 'node:path';
 import { buildIndex, computeIndex, readEntity, readAllEntities, writeEntity, assertValidSchema, reconcileEntity, initStore, storeDir } from './store.js';
 import { scanRepo } from './scanner.js';
 import { computeDrift, problems } from './drift.js';
-import { computeBrokenRefs, type BrokenRef } from './relationships.js';
+import { computeBrokenRefs, computeDerivedDrift, type BrokenRef, type DerivedDrift } from './relationships.js';
 import { commentSyntax } from './comment.js';
 import { IMPORTERS } from './importers.js';
 import { EMITTERS } from './emitters.js';
@@ -24,11 +24,23 @@ export function cmdShow(root: string, id: string): string {
   const drift = computeDrift(scanRepo(root).filter((t) => t.id === id), index);
   const sites = drift.map((d) => `  ${d.tag.file}:${d.tag.line}  @${d.tag.version}  [${d.status}]`).join('\n') || '  (no usages tagged)';
   const outgoing = (e.relationships ?? []).map((r) => `  #${r}${known.has(r) ? '' : ' [broken-ref]'}`).join('\n') || '  (none)';
+  const all = readAllEntities(root);
   const incoming =
-    readAllEntities(root)
+    all
       .filter((x) => (x.relationships ?? []).includes(id))
       .map((x) => `  #${x.id}`)
       .join('\n') || '  (none)';
+  const versions = new Map(index.map((x) => [x.id, x.version]));
+  const derivedFrom = Object.entries(e.derivedFrom ?? {})
+    .map(([b, v]) => {
+      const cur = versions.get(b);
+      return `  #${b}@${v}` + (cur === undefined ? ' [orphan]' : v < cur ? ` [stale: current @${cur}]` : '');
+    })
+    .join('\n');
+  const projections = all
+    .filter((x) => x.derivedFrom && id in x.derivedFrom)
+    .map((x) => `  #${x.id} (built on @${x.derivedFrom![id]})`)
+    .join('\n');
   return [
     `#${e.id}@${e.version}  (hash ${e.hash})`,
     e.summary,
@@ -40,17 +52,21 @@ export function cmdShow(root: string, id: string): string {
     outgoing,
     'Referenced by:',
     incoming,
+    ...(derivedFrom ? ['Derived from:', derivedFrom] : []),
+    ...(projections ? ['Projections:', projections] : []),
   ]
     .filter(Boolean)
     .join('\n');
 }
 
-export function cmdScan(root: string): { report: string; problems: DriftItem[]; brokenRefs: BrokenRef[] } {
+export function cmdScan(root: string): { report: string; problems: DriftItem[]; brokenRefs: BrokenRef[]; derived: DerivedDrift[] } {
   const index = computeIndex(root);
   const tags = scanRepo(root);
   const probs = problems(computeDrift(tags, index));
-  const brokenRefs = computeBrokenRefs(readAllEntities(root), new Set(index.map((e) => e.id)));
-  const total = probs.length + brokenRefs.length;
+  const entities = readAllEntities(root);
+  const brokenRefs = computeBrokenRefs(entities, new Set(index.map((e) => e.id)));
+  const derived = computeDerivedDrift(entities, new Map(index.map((e) => [e.id, e.version])));
+  const total = probs.length + brokenRefs.length + derived.length;
   const lines = [
     ...probs.map(
       (d) =>
@@ -58,21 +74,39 @@ export function cmdScan(root: string): { report: string; problems: DriftItem[]; 
         (d.currentVersion !== null ? ` (current @${d.currentVersion})` : ''),
     ),
     ...brokenRefs.map((b) => `  #${b.entity} -> #${b.ref} [broken-ref]`),
+    ...derived.map(
+      (d) =>
+        `  #${d.entity} derived from #${d.base}@${d.builtOn} -> ${d.status}` +
+        (d.currentVersion !== null ? ` (current @${d.currentVersion})` : ''),
+    ),
   ];
   const report =
     total === 0 ? `Scanned ${tags.length} tag(s). No drift.` : `Scanned ${tags.length} tag(s). ${total} problem(s):\n` + lines.join('\n');
-  return { report, problems: probs, brokenRefs };
+  return { report, problems: probs, brokenRefs, derived };
 }
 
 export function cmdNotify(root: string, id: string): string {
   const entity = reconcileEntity(root, id);
-  const stale = computeDrift(scanRepo(root), buildIndex(root)).filter((d) => d.tag.id === id && d.status === 'stale');
-  if (stale.length === 0) return `antidrift: #${id} is now @${entity.version}. No stale usages.`;
-  return (
-    `antidrift: #${id} changed to @${entity.version}. ${stale.length} usage site(s) are now STALE — ` +
-    `re-read .antidrift/entities/${id}.json and revalidate:\n` +
-    stale.map((d) => `  ${d.tag.file}:${d.tag.line} (tagged @${d.tag.version})`).join('\n')
+  const index = buildIndex(root);
+  const stale = computeDrift(scanRepo(root), index).filter((d) => d.tag.id === id && d.status === 'stale');
+  const projections = computeDerivedDrift(readAllEntities(root), new Map(index.map((e) => [e.id, e.version]))).filter(
+    (d) => d.base === id,
   );
+  if (stale.length === 0 && projections.length === 0) return `antidrift: #${id} is now @${entity.version}. No stale usages.`;
+  const parts: string[] = [];
+  if (stale.length)
+    parts.push(
+      `antidrift: #${id} changed to @${entity.version}. ${stale.length} usage site(s) are now STALE — ` +
+        `re-read .antidrift/entities/${id}.json and revalidate:\n` +
+        stale.map((d) => `  ${d.tag.file}:${d.tag.line} (tagged @${d.tag.version})`).join('\n'),
+    );
+  if (projections.length)
+    parts.push(
+      `antidrift: #${id} changed to @${entity.version}. ${projections.length} projection(s) derived from it are now STALE — ` +
+        `update each one's schema if needed, then set its derivedFrom.${id} to ${entity.version}:\n` +
+        projections.map((d) => `  #${d.entity} (built on @${d.builtOn})`).join('\n'),
+    );
+  return parts.join('\n');
 }
 
 export function cmdTag(root: string, id: string, target: string): string {
@@ -106,7 +140,10 @@ export async function cmdGenTypes(root: string, lang = 'ts', out?: string): Prom
   const dest = out ?? join(storeDir(root), 'generated', `types.${emitter.ext}`);
   mkdirSync(dirname(dest), { recursive: true });
   writeFileSync(dest, code);
-  return `wrote ${dest}`;
+  if (!emitter.emitEnums) return `wrote ${dest}`;
+  const enumsDest = dest.replace(/(\.[^./\\]+)?$/, `.enums.${emitter.ext}`);
+  writeFileSync(enumsDest, emitter.emitEnums(readAllEntities(root)));
+  return `wrote ${dest} and ${enumsDest}`;
 }
 
 const USAGE =
@@ -134,7 +171,7 @@ async function main(): Promise<void> {
       case 'scan': {
         const r = cmdScan(root);
         console.log(r.report);
-        process.exit(r.problems.length + r.brokenRefs.length ? 1 : 0);
+        process.exit(r.problems.length + r.brokenRefs.length + r.derived.length ? 1 : 0);
         break;
       }
       case 'reconcile':

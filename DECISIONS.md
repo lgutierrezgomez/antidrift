@@ -52,3 +52,21 @@ Shipped all four; 45 tests, clean build, pushed to GitHub. Decisions:
 ## Done — publishing
 - **On GitHub (private):** https://github.com/lgutierrezgomez/antidrift (wave 1 + wave 2 pushed).
 - **Still your call:** flip the repo to **public** and publish to the plugin **marketplace** when ready.
+
+## Wave 3 (field feedback from Otakin V1 — `docs/feedback/FEEDBACK-otakin-v1.md`), v0.2.0
+- **Projections via `derivedFrom: { base: version }`**, not schema composition (pick/omit/extend).
+  The projection keeps a plain, explicit JSON Schema; antidrift only tracks *which base version it was
+  written against*. Composition would need `$ref`/merge machinery that the importer deliberately
+  strips for security. `scan` exits non-zero on a stale projection; `notify` on the base names them.
+  Editing `derivedFrom` doesn't bump the projection's version (only `schema` does).
+- **Enums file is `<out>.enums.ts`**, a sibling of the types file, not `enums.ts` — a custom `out`
+  path often sits in a source folder where a plain `enums.ts` could clobber a hand-written file.
+  Constant names are `ENTITY_PROP_PATH` (array `items` and anyOf/oneOf/allOf keep the path); name
+  collisions get `_2`, `_3`. Values are emitted as JSON literals, so schema content can't inject code.
+- **Ajv: documented, not shipped as a helper.** antidrift is a dev-time tool; a runtime helper would
+  make apps depend on it. The README snippet was compiled under NodeNext with real ajv@8 +
+  ajv-formats@3 — the obvious `as typeof addFormatsModule` cast fails with TS2349; the working cast is
+  `as typeof addFormatsModule.default`.
+- **Cheaper tags = guidance only.** The scanner already accepts one tag per file; the skill now says
+  so. Import-based usage inference was skipped (language-specific).
+- **Not done:** DB-only-field guidance is docs (README + skill), not enforcement.

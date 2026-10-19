@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { type BrokenRef } from './relationships.js';
+import { type BrokenRef, type DerivedDrift } from './relationships.js';
 import type { DriftItem } from './types.js';
 export declare function cmdList(root: string): string;
 export declare function cmdShow(root: string, id: string): string;
@@ -7,6 +7,7 @@ export declare function cmdScan(root: string): {
     report: string;
     problems: DriftItem[];
     brokenRefs: BrokenRef[];
+    derived: DerivedDrift[];
 };
 export declare function cmdNotify(root: string, id: string): string;
 export declare function cmdTag(root: string, id: string, target: string): string;
