@@ -4,26 +4,43 @@ import { computeIndex } from '../store.js';
 import { walkFiles } from '../scanner.js';
 import { loadTokens } from './tokens.js';
 import { readUiConfig, staleTargets, globToRegExp } from './config.js';
-import { readComponent, brokenTokenRefs } from './components.js';
+import { listComponentIds, loadComponent, brokenTokenRefs } from './components.js';
 import { parseUiTags } from './tags.js';
 import { findColorLiterals, colorIndex, isGeneratedFile, UI_EXTENSIONS, BUILD_SKIP_DIRS } from './hardcoded.js';
 /** Spec/implementation/use drift, stale generated token files, and hardcoded colors. Call only when uiEnabled(root). */
 export function computeUiScan(root) {
-    const tokens = loadTokens(root);
-    const cfg = readUiConfig(root);
-    const index = computeIndex(root);
-    const entityIds = new Set(index.filter((e) => !e.kind).map((e) => e.id));
-    const components = new Map(index.filter((e) => e.kind === 'component').map((e) => [e.id, readComponent(root, e.id)]));
     const problems = [];
     const hardcoded = [];
+    let tokens = new Map();
+    let tokensOk = true;
+    try {
+        tokens = loadTokens(root);
+    }
+    catch (e) {
+        tokensOk = false;
+        problems.push({ kind: 'invalid-tokens', line: `  tokens: ${e.message} [invalid-tokens]` });
+    }
+    const cfg = readUiConfig(root);
+    const entityIds = new Set(computeIndex(root).filter((e) => !e.kind).map((e) => e.id));
+    const components = new Map();
+    for (const id of listComponentIds(root)) {
+        const r = loadComponent(root, id);
+        if ('error' in r)
+            problems.push({ kind: 'invalid-component', line: `  ${r.error} [invalid-component]` });
+        else
+            components.set(id, r.component);
+    }
     for (const id of components.keys())
         if (entityIds.has(id))
             problems.push({ kind: 'id-clash', line: `  #${id} is both an entity and a component [id-clash]` });
-    for (const c of components.values())
-        for (const b of brokenTokenRefs(c, tokens))
-            problems.push({ kind: 'broken-token', line: `  #${b.component} ${b.slot} -> ${b.ref} [broken-token]` });
-    for (const t of staleTargets(root, cfg))
-        problems.push({ kind: 'stale-generated', line: `  ${t.out} -> out of date or hand-edited (run gen-tokens)` });
+    // With unreadable tokens every ref would look broken and every target stale — report the cause only.
+    if (tokensOk) {
+        for (const c of components.values())
+            for (const b of brokenTokenRefs(c, tokens))
+                problems.push({ kind: 'broken-token', line: `  #${b.component} ${b.slot} -> ${b.ref} [broken-token]` });
+        for (const t of staleTargets(root, cfg))
+            problems.push({ kind: 'stale-generated', line: `  ${t.out} -> out of date or hand-edited (run gen-tokens)` });
+    }
     const generated = new Set(cfg.targets.map((t) => relative(root, resolve(root, t.out)).split(sep).join('/')));
     const ignore = cfg.ignore.map(globToRegExp);
     const colors = colorIndex(tokens);

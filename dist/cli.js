@@ -19,12 +19,20 @@ export { cmdShowComponent, cmdTokens, cmdNotifyTokens, cmdUiInit };
 const isComponent = (root, id) => !existsSync(entityPath(root, id)) && existsSync(componentPath(root, id));
 export function cmdList(root) {
     const index = computeIndex(root);
-    const tokenCount = loadTokens(root).size;
-    if (index.length === 0 && tokenCount === 0)
+    let tokenLine = '';
+    try {
+        const n = loadTokens(root).size;
+        if (n)
+            tokenLine = `${n} token(s) — run tokens to list them`;
+    }
+    catch (e) {
+        tokenLine = `tokens: invalid — ${e.message}`;
+    }
+    if (index.length === 0 && !tokenLine)
         return 'No entities. Run `antidrift init`, then add files under .antidrift/entities/.';
     return [
         ...index.map((e) => `#${e.id}@${e.version}  ${e.kind === 'component' ? '[component] ' : ''}${e.title} — ${e.summary}`),
-        ...(tokenCount ? [`${tokenCount} token(s) — run tokens to list them`] : []),
+        ...(tokenLine ? [tokenLine] : []),
     ].join('\n');
 }
 export function cmdShow(root, id) {

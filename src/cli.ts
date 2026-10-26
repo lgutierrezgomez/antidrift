@@ -23,11 +23,17 @@ const isComponent = (root: string, id: string) => !existsSync(entityPath(root, i
 
 export function cmdList(root: string): string {
   const index = computeIndex(root);
-  const tokenCount = loadTokens(root).size;
-  if (index.length === 0 && tokenCount === 0) return 'No entities. Run `antidrift init`, then add files under .antidrift/entities/.';
+  let tokenLine = '';
+  try {
+    const n = loadTokens(root).size;
+    if (n) tokenLine = `${n} token(s) — run tokens to list them`;
+  } catch (e) {
+    tokenLine = `tokens: invalid — ${(e as Error).message}`;
+  }
+  if (index.length === 0 && !tokenLine) return 'No entities. Run `antidrift init`, then add files under .antidrift/entities/.';
   return [
     ...index.map((e) => `#${e.id}@${e.version}  ${e.kind === 'component' ? '[component] ' : ''}${e.title} — ${e.summary}`),
-    ...(tokenCount ? [`${tokenCount} token(s) — run tokens to list them`] : []),
+    ...(tokenLine ? [tokenLine] : []),
   ].join('\n');
 }
 

@@ -3,7 +3,7 @@ import { basename, join } from 'node:path';
 import { buildIndex } from '../store.js';
 import { walkFiles } from '../scanner.js';
 import { loadTokens, loadRawTokens, parseTokenTree, resolveTokenTree, tokensDir, type TokenValue } from './tokens.js';
-import { componentsDir, readComponent, reconcileComponent, resolveMatrix, brokenTokenRefs } from './components.js';
+import { componentsDir, listComponentIds, loadComponent, readComponent, reconcileComponent, resolveMatrix, brokenTokenRefs } from './components.js';
 import { uiConfigPath, staleTargets } from './config.js';
 import { parseUiTags, type ImplTag, type UseTag } from './tags.js';
 import { BUILD_SKIP_DIRS } from './hardcoded.js';
@@ -105,7 +105,10 @@ export function cmdNotifyTokens(root: string): string {
     return `antidrift: tokens invalid — ${(e as Error).message}`;
   }
   const stale = staleTargets(root);
-  const broken = readdirSafe(componentsDir(root)).flatMap((id) => brokenTokenRefs(readComponent(root, id), tokens));
+  const broken = listComponentIds(root).flatMap((id) => {
+    const r = loadComponent(root, id);
+    return 'error' in r ? [] : brokenTokenRefs(r.component, tokens);
+  });
   const parts: string[] = [];
   if (stale.length)
     parts.push(`antidrift: ${stale.length} generated token file(s) are out of date — run gen-tokens:\n` + stale.map((t) => `  ${t.out}`).join('\n'));

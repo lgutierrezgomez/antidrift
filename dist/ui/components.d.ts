@@ -13,7 +13,13 @@ export interface Component {
 export declare const componentsDir: (root: string) => string;
 export declare const componentPath: (root: string, id: string) => string;
 export declare function listComponentIds(root: string): string[];
-export declare const readComponent: (root: string, id: string) => Component;
+/** Parse + validate one component file; errors name the file instead of throwing. */
+export declare function loadComponent(root: string, id: string): {
+    component: Component;
+} | {
+    error: string;
+};
+export declare function readComponent(root: string, id: string): Component;
 export declare function validateComponent(c: Component): void;
 export declare function writeComponent(root: string, c: Component): void;
 /** Same rules as entities: an empty hash is stamped without a bump; any spec change bumps. */

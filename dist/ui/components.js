@@ -13,7 +13,38 @@ export function listComponentIds(root) {
         return [];
     return readdirSync(componentsDir(root)).filter((f) => f.endsWith('.json')).map((f) => f.replace(/\.json$/, '')).sort();
 }
-export const readComponent = (root, id) => JSON.parse(readFileSync(componentPath(root, id), 'utf8'));
+/** Parse + validate one component file; errors name the file instead of throwing. */
+export function loadComponent(root, id) {
+    const rel = `components/${id}.json`;
+    let c;
+    try {
+        c = JSON.parse(readFileSync(componentPath(root, id), 'utf8'));
+    }
+    catch (e) {
+        return { error: `${rel}: ${e instanceof SyntaxError ? 'invalid JSON' : 'unreadable'} (${e.message})` };
+    }
+    if (!c || typeof c !== 'object' || Array.isArray(c))
+        return { error: `${rel}: must be a JSON object` };
+    if (c.id !== id)
+        return { error: `${rel}: id ${JSON.stringify(c.id)} doesn't match the file name` };
+    if (!Number.isInteger(c.version) || c.version < 1)
+        return { error: `${rel}: "version" must be a positive integer` };
+    if (typeof c.hash !== 'string')
+        return { error: `${rel}: "hash" must be a string ("" for a new component)` };
+    try {
+        validateComponent(c);
+    }
+    catch (e) {
+        return { error: `${rel}: ${e.message}` };
+    }
+    return { component: c };
+}
+export function readComponent(root, id) {
+    const r = loadComponent(root, id);
+    if ('error' in r)
+        throw new Error(r.error);
+    return r.component;
+}
 export function validateComponent(c) {
     const fail = (why) => {
         throw new Error(`Invalid component "${c.id}": ${why}`);
@@ -54,7 +85,6 @@ const specHash = (c) => computeHash({ variants: c.variants, states: c.states, st
 /** Same rules as entities: an empty hash is stamped without a bump; any spec change bumps. */
 export function reconcileComponent(root, id) {
     const c = readComponent(root, id);
-    validateComponent(c);
     const hash = specHash(c);
     if (c.hash === '') {
         c.hash = hash;

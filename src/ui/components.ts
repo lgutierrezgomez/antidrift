@@ -28,8 +28,32 @@ export function listComponentIds(root: string): string[] {
   return readdirSync(componentsDir(root)).filter((f) => f.endsWith('.json')).map((f) => f.replace(/\.json$/, '')).sort();
 }
 
-export const readComponent = (root: string, id: string): Component =>
-  JSON.parse(readFileSync(componentPath(root, id), 'utf8')) as Component;
+/** Parse + validate one component file; errors name the file instead of throwing. */
+export function loadComponent(root: string, id: string): { component: Component } | { error: string } {
+  const rel = `components/${id}.json`;
+  let c: Component;
+  try {
+    c = JSON.parse(readFileSync(componentPath(root, id), 'utf8')) as Component;
+  } catch (e) {
+    return { error: `${rel}: ${e instanceof SyntaxError ? 'invalid JSON' : 'unreadable'} (${(e as Error).message})` };
+  }
+  if (!c || typeof c !== 'object' || Array.isArray(c)) return { error: `${rel}: must be a JSON object` };
+  if (c.id !== id) return { error: `${rel}: id ${JSON.stringify(c.id)} doesn't match the file name` };
+  if (!Number.isInteger(c.version) || c.version < 1) return { error: `${rel}: "version" must be a positive integer` };
+  if (typeof c.hash !== 'string') return { error: `${rel}: "hash" must be a string ("" for a new component)` };
+  try {
+    validateComponent(c);
+  } catch (e) {
+    return { error: `${rel}: ${(e as Error).message}` };
+  }
+  return { component: c };
+}
+
+export function readComponent(root: string, id: string): Component {
+  const r = loadComponent(root, id);
+  if ('error' in r) throw new Error(r.error);
+  return r.component;
+}
 
 export function validateComponent(c: Component): void {
   const fail = (why: string): never => {
@@ -66,7 +90,6 @@ const specHash = (c: Component) => computeHash({ variants: c.variants, states: c
 /** Same rules as entities: an empty hash is stamped without a bump; any spec change bumps. */
 export function reconcileComponent(root: string, id: string): Component {
   const c = readComponent(root, id);
-  validateComponent(c);
   const hash = specHash(c);
   if (c.hash === '') {
     c.hash = hash;

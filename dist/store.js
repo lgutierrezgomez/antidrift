@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { Ajv2020 as Ajv } from 'ajv/dist/2020.js';
-import { componentsDir, listComponentIds, readComponent } from './ui/components.js';
+import { componentsDir, listComponentIds, loadComponent } from './ui/components.js';
 const ajv = new Ajv({ strict: false });
 export const storeDir = (root) => join(root, '.antidrift');
 export const entitiesDir = (root) => join(storeDir(root), 'entities');
@@ -67,8 +67,12 @@ export function computeIndex(root) {
         const e = readEntity(root, id);
         return { id: e.id, title: e.title ?? e.id, version: e.version, hash: e.hash, summary: e.summary ?? '', file: `entities/${id}.json` };
     });
-    const components = listComponentIds(root).map((id) => {
-        const c = readComponent(root, id);
+    // Invalid component files are skipped here (scan reports them) so entity commands never break on them.
+    const components = listComponentIds(root).flatMap((id) => {
+        const r = loadComponent(root, id);
+        if ('error' in r)
+            return [];
+        const c = r.component;
         return { id: c.id, title: c.title ?? c.id, version: c.version, hash: c.hash, summary: c.summary ?? '', file: `components/${id}.json`, kind: 'component' };
     });
     return [...entities, ...components];

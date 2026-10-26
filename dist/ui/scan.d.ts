@@ -1,5 +1,5 @@
 export interface UiFinding {
-    kind: 'stale-impl' | 'orphan-impl' | 'broken-use' | 'broken-token' | 'stale-generated' | 'id-clash' | 'hardcoded';
+    kind: 'stale-impl' | 'orphan-impl' | 'broken-use' | 'broken-token' | 'stale-generated' | 'id-clash' | 'invalid-component' | 'invalid-tokens' | 'hardcoded';
     line: string;
 }
 export interface UiScanResult {
