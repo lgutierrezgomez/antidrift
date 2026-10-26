@@ -1,6 +1,7 @@
 import { load as yamlLoad } from 'js-yaml';
 import { parse, Kind, type TypeNode } from 'graphql';
 import type { Entity } from './types.js';
+import { computeHash } from './store.js';
 
 /** `notes` collects human-readable warnings about input that was skipped. */
 export type Importer = (src: string, name: string, notes?: string[]) => Entity[];
@@ -20,18 +21,30 @@ export function stripRefs(node: unknown): unknown {
   return node;
 }
 
-const mk = (id: string, schema: Record<string, unknown>, relationships: string[] = []): Entity => ({
-  id: sanitizeId(id),
-  version: 1,
-  hash: '',
-  schema: stripRefs(schema) as Record<string, unknown>,
-  ...(relationships.length ? { relationships } : {}),
-});
+/** A fresh entity at @1 with its hash already stamped, titled/summarized from the schema when it says. */
+const mk = (id: string, schema: Record<string, unknown>, relationships: string[] = []): Entity => {
+  const clean = stripRefs(schema) as Record<string, unknown>;
+  return {
+    id: sanitizeId(id),
+    version: 1,
+    hash: computeHash(clean),
+    ...(typeof schema.title === 'string' && schema.title.trim() ? { title: schema.title.trim() } : {}),
+    ...(typeof schema.description === 'string' && schema.description.trim() ? { summary: schema.description.trim() } : {}),
+    schema: clean,
+    ...(relationships.length ? { relationships } : {}),
+  };
+};
 
 export const importJsonSchema: Importer = (src, name) => {
   const doc = JSON.parse(src);
   const defs = doc.$defs ?? doc.definitions;
-  if (defs && typeof defs === 'object') return Object.entries(defs).map(([id, schema]) => mk(id, schema as Record<string, unknown>));
+  if (defs && typeof defs === 'object')
+    return Object.entries(defs).map(([id, schema]) => {
+      const refs = new Set<string>();
+      collectRefs(schema, refs);
+      refs.delete(id);
+      return mk(id, schema as Record<string, unknown>, [...refs].map(sanitizeId));
+    });
   return [mk(name, doc)];
 };
 

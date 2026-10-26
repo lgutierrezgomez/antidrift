@@ -1,5 +1,6 @@
 import { load as yamlLoad } from 'js-yaml';
 import { parse, Kind } from 'graphql';
+import { computeHash } from './store.js';
 export const sanitizeId = (s) => s.replace(/[^A-Za-z0-9_.-]/g, '-');
 /** Replace any `$ref` node with a self-contained schema. Internal refs would break
  * per-entity compilation; external refs (file://, http://) would leak on resolution. */
@@ -16,18 +17,29 @@ export function stripRefs(node) {
     }
     return node;
 }
-const mk = (id, schema, relationships = []) => ({
-    id: sanitizeId(id),
-    version: 1,
-    hash: '',
-    schema: stripRefs(schema),
-    ...(relationships.length ? { relationships } : {}),
-});
+/** A fresh entity at @1 with its hash already stamped, titled/summarized from the schema when it says. */
+const mk = (id, schema, relationships = []) => {
+    const clean = stripRefs(schema);
+    return {
+        id: sanitizeId(id),
+        version: 1,
+        hash: computeHash(clean),
+        ...(typeof schema.title === 'string' && schema.title.trim() ? { title: schema.title.trim() } : {}),
+        ...(typeof schema.description === 'string' && schema.description.trim() ? { summary: schema.description.trim() } : {}),
+        schema: clean,
+        ...(relationships.length ? { relationships } : {}),
+    };
+};
 export const importJsonSchema = (src, name) => {
     const doc = JSON.parse(src);
     const defs = doc.$defs ?? doc.definitions;
     if (defs && typeof defs === 'object')
-        return Object.entries(defs).map(([id, schema]) => mk(id, schema));
+        return Object.entries(defs).map(([id, schema]) => {
+            const refs = new Set();
+            collectRefs(schema, refs);
+            refs.delete(id);
+            return mk(id, schema, [...refs].map(sanitizeId));
+        });
     return [mk(name, doc)];
 };
 function collectRefs(node, out) {

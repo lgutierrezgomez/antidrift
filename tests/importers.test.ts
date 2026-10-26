@@ -1,5 +1,6 @@
 import { test, expect } from 'vitest';
 import { importJsonSchema, importOpenApi, importPrisma, importGraphql, sanitizeId } from '../src/importers.js';
+import { computeHash } from '../src/store.js';
 
 test('sanitizeId coerces illegal chars', () => {
   expect(sanitizeId('User Role!')).toBe('User-Role-');
@@ -9,7 +10,7 @@ test('json-schema importer: one entity per $defs entry', () => {
   const ents = importJsonSchema(src, 'file');
   expect(ents.map((e) => e.id)).toEqual(['Student']);
   expect(ents[0].version).toBe(1);
-  expect(ents[0].hash).toBe('');
+  expect(ents[0].hash).toBe(computeHash(ents[0].schema));
 });
 test('json-schema importer: whole-doc fallback uses the file name', () => {
   expect(importJsonSchema(JSON.stringify({ type: 'object' }), 'student')[0].id).toBe('student');
@@ -109,4 +110,25 @@ test('graphql importer notes interface/union fields as unsupported, not as scala
   const notes: string[] = [];
   importGraphql(`interface Node { id: ID! } type Student { node: Node }`, 'schema', notes);
   expect(notes).toEqual(['Student.node: skipped unsupported type "Node"']);
+});
+
+test('json-schema importer: $refs between $defs become relationships', () => {
+  const src = JSON.stringify({
+    $defs: {
+      PersonName: { type: 'object', properties: { given: { type: 'string' } } },
+      Visit: { type: 'object', properties: { driver: { $ref: '#/$defs/PersonName' }, place: { $ref: '#/definitions/Place' } } },
+      Place: { type: 'object' },
+    },
+  });
+  const visit = importJsonSchema(src, 'x').find((e) => e.id === 'Visit')!;
+  expect(visit.relationships).toEqual(['PersonName', 'Place']);
+  expect(JSON.stringify(visit.schema)).not.toContain('$ref');
+});
+test('importers take title and summary from the schema', () => {
+  const src = JSON.stringify({ $defs: { Visit: { type: 'object', title: 'Gate visit', description: 'One vehicle entering a place.' } } });
+  const [v] = importJsonSchema(src, 'x');
+  expect(v.title).toBe('Gate visit');
+  expect(v.summary).toBe('One vehicle entering a place.');
+  const [plain] = importJsonSchema(JSON.stringify({ $defs: { Place: { type: 'object' } } }), 'x');
+  expect(plain.title).toBeUndefined();
 });
