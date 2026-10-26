@@ -1,6 +1,6 @@
 {
   "name": "antidrift",
-  "description": "antidrift — single-source-of-truth entity registry + drift tracking for AI-assisted development.",
+  "description": "antidrift — single-source-of-truth registry + drift tracking for data entities and design tokens, for AI-assisted development.",
   "owner": {
     "name": "Leonardo Gutiérrez Gómez",
     "url": "https://github.com/lgutierrezgomez"
@@ -9,7 +9,7 @@
     {
       "name": "antidrift",
       "source": "./",
-      "description": "Describe data entities once in JSON Schema; keep front, back, and agents in sync and flag drift. Commands: list, show, scan, init, tag, import (json-schema/openapi/prisma/graphql), gen-types."
+      "description": "Describe data entities once in JSON Schema; keep front, back, and agents in sync and flag drift. Optional UI module: design tokens with modes, component specs, generated CSS/Dart token files, hardcoded-color warnings. Commands: list, show, scan, init, tag, import, gen-types, tokens, gen-tokens, ui init."
     }
   ]
 }

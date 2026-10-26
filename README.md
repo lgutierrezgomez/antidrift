@@ -5,6 +5,10 @@ A **single-source-of-truth registry + drift tracker** for your data entities, sh
 AI agent) refer to the same definition, and antidrift flags the code that falls out of sync when
 an entity changes. Language-agnostic. Type generation is opt-in (`gen-types`); nothing else is generated.
 
+An optional **UI module** does the same for a design system: design tokens (with dark mode and
+palettes) and component specs live once in `.antidrift/`, antidrift generates each app's token file
+(CSS, Dart), and flags stale implementations and hardcoded colors — see [UI module](#ui-module-optional).
+
 ## Why
 
 When an agent works across a front and a back, the two drift apart and the agent can't hold every
