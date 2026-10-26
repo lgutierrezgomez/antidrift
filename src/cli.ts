@@ -37,8 +37,8 @@ export function cmdList(root: string): string {
   ].join('\n');
 }
 
-export function cmdShow(root: string, id: string): string {
-  if (isComponent(root, id)) return cmdShowComponent(root, id);
+export function cmdShow(root: string, id: string, opts: { full?: boolean } = {}): string {
+  if (isComponent(root, id)) return cmdShowComponent(root, id, opts);
   const e = readEntity(root, id);
   const index = computeIndex(root);
   const known = new Set(index.map((x) => x.id));
@@ -208,7 +208,7 @@ export function cmdGenTokens(root: string, lang?: string, out?: string): string 
 }
 
 const USAGE =
-  'usage: antidrift <init|list|show <id>|scan|reconcile <id>|notify <id>|tag <id> <file:line>|import <format> <file>|gen-types [lang] [out]|gen-tokens [lang out]|tokens [prefix]|notify-tokens|ui init>';
+  'usage: antidrift <init|list|show <id> [--full]|scan|reconcile <id>|notify <id>|tag <id> <file:line>|import <format> <file>|gen-types [lang] [out]|gen-tokens [lang out]|tokens [prefix]|notify-tokens|ui init>';
 
 function parseTagMode(flag: string | undefined): TagMode | undefined {
   if (!flag) return undefined;
@@ -235,7 +235,7 @@ async function main(): Promise<void> {
         console.log(cmdList(root));
         break;
       case 'show':
-        console.log(cmdShow(root, requireArg(arg, 'id')));
+        console.log(cmdShow(root, requireArg(arg, 'id'), { full: process.argv[4] === '--full' }));
         break;
       case 'scan': {
         const r = cmdScan(root);

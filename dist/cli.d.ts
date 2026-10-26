@@ -5,7 +5,9 @@ import { cmdShowComponent, cmdTokens, cmdNotifyTokens, cmdUiInit } from './ui/co
 import type { DriftItem } from './types.js';
 export { cmdShowComponent, cmdTokens, cmdNotifyTokens, cmdUiInit };
 export declare function cmdList(root: string): string;
-export declare function cmdShow(root: string, id: string): string;
+export declare function cmdShow(root: string, id: string, opts?: {
+    full?: boolean;
+}): string;
 export declare function cmdScan(root: string): {
     report: string;
     problems: DriftItem[];

@@ -8,7 +8,10 @@ export declare function collectUiTags(root: string): {
     impls: ImplTag[];
     uses: UseTag[];
 };
-export declare function cmdShowComponent(root: string, id: string): string;
+/** Compact by default (each non-default state lists only what it changes); `full` expands every slot. */
+export declare function cmdShowComponent(root: string, id: string, opts?: {
+    full?: boolean;
+}): string;
 export declare function cmdTokens(root: string, prefix?: string): string;
 export declare function cmdNotifyComponent(root: string, id: string): string;
 export declare function cmdNotifyTokens(root: string): string;

@@ -3,7 +3,7 @@ import { basename, join } from 'node:path';
 import { buildIndex } from '../store.js';
 import { walkFiles } from '../scanner.js';
 import { loadTokens, loadRawTokens, parseTokenTree, resolveTokenTree, tokensDir } from './tokens.js';
-import { componentsDir, listComponentIds, loadComponent, readComponent, reconcileComponent, resolveMatrix, brokenTokenRefs } from './components.js';
+import { componentsDir, listComponentIds, loadComponent, readComponent, reconcileComponent, resolveMatrix, brokenTokenRefs, } from './components.js';
 import { uiConfigPath, staleTargets } from './config.js';
 import { parseUiTags } from './tags.js';
 import { BUILD_SKIP_DIRS } from './hardcoded.js';
@@ -44,15 +44,22 @@ export function collectUiTags(root) {
     }
     return { impls, uses };
 }
-export function cmdShowComponent(root, id) {
+/** Compact by default (each non-default state lists only what it changes); `full` expands every slot. */
+export function cmdShowComponent(root, id, opts = {}) {
     const c = readComponent(root, id);
     const tokens = loadTokens(root);
     const matrix = resolveMatrix(c, tokens);
+    const slotLine = (v, s, p, slot) => `  ${v}.${s}.${p} → ${slot.ref} = ${slot.value ? formatTokenValue(slot.value) + formatModes(tokens.get(slot.ref.slice(1, -1))) : '[broken-token]'}`;
     const styles = [];
     for (const v of c.variants)
-        for (const s of c.states)
-            for (const [p, slot] of Object.entries(matrix[v][s]))
-                styles.push(`  ${v}.${s}.${p} → ${slot.ref} = ${slot.value ? formatTokenValue(slot.value) + formatModes(tokens.get(slot.ref.slice(1, -1))) : '[broken-token]'}`);
+        for (const s of c.states) {
+            const props = Object.entries(matrix[v][s]).filter(([p, slot]) => opts.full || s === 'default' || slot.ref !== matrix[v].default[p]?.ref);
+            if (props.length)
+                for (const [p, slot] of props)
+                    styles.push(slotLine(v, s, p, slot));
+            else if (!opts.full && s !== 'default')
+                styles.push(`  ${v}.${s}  (same as default)`);
+        }
     const { impls, uses } = collectUiTags(root);
     const implLines = impls
         .filter((t) => t.id === id)
@@ -65,7 +72,7 @@ export function cmdShowComponent(root, id) {
         c.summary,
         `Variants: ${c.variants.join(', ')}`,
         `States: ${c.states.join(', ')}`,
-        'Styles:',
+        opts.full ? 'Styles:' : `Styles (other states list only what differs from default; show ${c.id} --full lists every slot):`,
         ...styles,
         'Implementations:',
         ...(implLines.length ? implLines : ['  (none tagged)']),

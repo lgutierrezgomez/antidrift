@@ -51,7 +51,8 @@ test('show <component> prints the resolved matrix, impls and uses', () => {
   expect(out).toContain('Variants: primary, secondary');
   expect(out).toContain('States: default, disabled');
   expect(out).toContain('  primary.disabled.background → {color.neutral.300} = #D0D4DC');
-  expect(out).toContain('  primary.disabled.radius → {radius.md} = 8px');
+  expect(out).not.toContain('primary.disabled.radius');
+  expect(cmdShow(root, 'pagar_button', { full: true })).toContain('  primary.disabled.radius → {radius.md} = 8px');
   expect(out).toContain('  PagarButton.tsx:1  @1  [stale]');
   expect(out).toContain('  checkout.dart:1  :primary  [ok]');
 });
@@ -122,4 +123,14 @@ test('import tokens validates against existing tokens and refuses overwrites', (
   put('in/dup.json', JSON.stringify({ radius: { md: { $type: 'dimension', $value: '4px' } } }));
   expect(() => cmdImport(root, 'tokens', join(root, 'in/dup.json'))).toThrow(/radius\.md/);
   expect(existsSync(join(tokensDir(root), 'dup.json'))).toBe(false);
+});
+
+test('show <component> is compact: states list only what differs, unchanged states say so', () => {
+  const out = cmdShow(root, 'pagar_button');
+  expect(out).toContain('  primary.default.radius → {radius.md} = 8px');
+  expect(out).toContain('  primary.disabled.background → {color.neutral.300} = #D0D4DC');
+  expect(out).toContain('  secondary.disabled  (same as default)');
+  expect(out).toContain('--full');
+  const lines = (s: string) => s.split('\n').length;
+  expect(lines(out)).toBeLessThan(lines(cmdShow(root, 'pagar_button', { full: true })));
 });
