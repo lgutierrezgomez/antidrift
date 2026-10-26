@@ -1,5 +1,7 @@
-import { type TokenValue } from './tokens.js';
+import { type Token, type TokenValue } from './tokens.js';
 import { type ImplTag, type UseTag } from './tags.js';
+/** `  [dark: #58A6FF, savile: …]` for a token with mode values, else ''. */
+export declare function formatModes(t: Token | undefined): string;
 export declare function formatTokenValue(v: TokenValue): string;
 /** Every impl/use tag in the repo (build output folders skipped). */
 export declare function collectUiTags(root: string): {

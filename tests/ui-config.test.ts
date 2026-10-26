@@ -19,7 +19,7 @@ beforeEach(() => {
 });
 
 test('readUiConfig defaults when ui.json is missing', () => {
-  expect(readUiConfig(root)).toEqual({ targets: [], ignore: [], hardcoded: 'warn' });
+  expect(readUiConfig(root)).toEqual({ targets: [], ignore: [], hardcoded: 'warn', modes: [] });
 });
 
 test('readUiConfig rejects unknown lang', () => {

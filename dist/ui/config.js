@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { storeDir } from '../store.js';
-import { loadTokens, tokensDir } from './tokens.js';
+import { loadTokens, tokensDir, validateTokenModes } from './tokens.js';
 import { TOKEN_EMITTERS } from './token-emitters.js';
 export const uiConfigPath = (root) => join(storeDir(root), 'ui.json');
 /** The UI module is on only when its folders exist — otherwise antidrift behaves as before. */
@@ -9,7 +9,7 @@ export const uiEnabled = (root) => existsSync(tokensDir(root)) || existsSync(joi
 export function readUiConfig(root) {
     const path = uiConfigPath(root);
     if (!existsSync(path))
-        return { targets: [], ignore: [], hardcoded: 'warn' };
+        return { targets: [], ignore: [], hardcoded: 'warn', modes: [] };
     let raw;
     try {
         raw = JSON.parse(readFileSync(path, 'utf8'));
@@ -17,6 +17,8 @@ export function readUiConfig(root) {
     catch (e) {
         throw new Error(`ui.json: invalid JSON (${e.message})`);
     }
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+        throw new Error('ui.json: must be a JSON object');
     const targets = (raw.targets ?? []);
     if (!Array.isArray(targets))
         throw new Error('ui.json: "targets" must be an array');
@@ -32,7 +34,33 @@ export function readUiConfig(root) {
     const hardcoded = (raw.hardcoded ?? 'warn');
     if (hardcoded !== 'warn' && hardcoded !== 'error')
         throw new Error('ui.json: "hardcoded" must be "warn" or "error"');
-    return { targets, ignore, hardcoded };
+    return { targets, ignore, hardcoded, modes: readModes(raw.modes) };
+}
+const NAME_RE = /^[A-Za-z0-9_-]+$/;
+const ATTR_RE = /^[a-z][a-z0-9-]*$/;
+/** Mode axes: names and attributes are validated because they end up inside generated CSS/Dart. */
+function readModes(raw) {
+    if (raw === undefined)
+        return [];
+    if (!Array.isArray(raw))
+        throw new Error('ui.json: "modes" must be an array of axes');
+    const seen = new Set();
+    return raw.map((a) => {
+        const where = `ui.json: mode axis ${JSON.stringify(a?.axis)}`;
+        if (!a || typeof a.axis !== 'string' || !NAME_RE.test(a.axis))
+            throw new Error('ui.json: every mode axis needs an "axis" name');
+        const values = a.values;
+        if (!Array.isArray(values) || values.length < 2 || !values.every((v) => typeof v === 'string' && NAME_RE.test(v)))
+            throw new Error(`${where} needs at least two values (the first is the default), made of letters, digits, "_" or "-"`);
+        for (const v of values) {
+            if (seen.has(v))
+                throw new Error(`${where}: value "${v}" is used twice across axes`);
+            seen.add(v);
+        }
+        if (typeof a.attribute !== 'string' || !ATTR_RE.test(a.attribute))
+            throw new Error(`${where} needs an "attribute" like "data-theme"`);
+        return { axis: a.axis, values: values, attribute: a.attribute, ...(a.followSystem === true ? { followSystem: true } : {}) };
+    });
 }
 /** Minimal glob: `**` spans directories, `*` stays within one, `?` is one character. Matches repo-relative POSIX paths. */
 export function globToRegExp(glob) {
@@ -57,17 +85,18 @@ export function globToRegExp(glob) {
     }
     return new RegExp(`^${re}$`);
 }
-export function generateTarget(root, t, tokens = loadTokens(root)) {
+export function generateTarget(root, t, tokens = loadTokens(root), modes = readUiConfig(root).modes) {
     const emitter = TOKEN_EMITTERS.get(t.lang);
     if (!emitter)
         throw new Error(`unknown token target lang: ${t.lang}`);
-    return emitter.emit(tokens, { className: t.className });
+    validateTokenModes(tokens, modes);
+    return emitter.emit(tokens, { className: t.className, modes });
 }
 /** Targets whose file is missing or differs from a fresh generation (tokens changed, or hand-edited). */
 export function staleTargets(root, cfg = readUiConfig(root)) {
     const tokens = loadTokens(root);
     return cfg.targets.filter((t) => {
         const path = resolve(root, t.out);
-        return !existsSync(path) || readFileSync(path, 'utf8') !== generateTarget(root, t, tokens);
+        return !existsSync(path) || readFileSync(path, 'utf8') !== generateTarget(root, t, tokens, cfg.modes);
     });
 }

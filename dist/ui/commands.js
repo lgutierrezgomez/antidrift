@@ -7,6 +7,11 @@ import { componentsDir, listComponentIds, loadComponent, readComponent, reconcil
 import { uiConfigPath, staleTargets } from './config.js';
 import { parseUiTags } from './tags.js';
 import { BUILD_SKIP_DIRS } from './hardcoded.js';
+/** `  [dark: #58A6FF, savile: …]` for a token with mode values, else ''. */
+export function formatModes(t) {
+    const entries = Object.entries(t?.modes ?? {}).sort(([a], [b]) => (a < b ? -1 : 1));
+    return entries.length ? `  [${entries.map(([k, v]) => `${k}: ${formatTokenValue(v)}`).join(', ')}]` : '';
+}
 export function formatTokenValue(v) {
     switch (v.type) {
         case 'color':
@@ -47,7 +52,7 @@ export function cmdShowComponent(root, id) {
     for (const v of c.variants)
         for (const s of c.states)
             for (const [p, slot] of Object.entries(matrix[v][s]))
-                styles.push(`  ${v}.${s}.${p} → ${slot.ref} = ${slot.value ? formatTokenValue(slot.value) : '[broken-token]'}`);
+                styles.push(`  ${v}.${s}.${p} → ${slot.ref} = ${slot.value ? formatTokenValue(slot.value) + formatModes(tokens.get(slot.ref.slice(1, -1))) : '[broken-token]'}`);
     const { impls, uses } = collectUiTags(root);
     const implLines = impls
         .filter((t) => t.id === id)
@@ -74,7 +79,7 @@ export function cmdTokens(root, prefix) {
     const lines = [...loadTokens(root).values()]
         .filter((t) => !prefix || t.path === prefix || t.path.startsWith(prefix + '.'))
         .sort((a, b) => (a.path < b.path ? -1 : 1))
-        .map((t) => `${t.path}  ${t.type}  ${t.aliasOf ? `{${t.aliasOf}} = ` : ''}${formatTokenValue(t.value)}`);
+        .map((t) => `${t.path}  ${t.type}  ${t.aliasOf ? `{${t.aliasOf}} = ` : ''}${formatTokenValue(t.value)}${formatModes(t)}`);
     return lines.length ? lines.join('\n') : 'No tokens.';
 }
 export function cmdNotifyComponent(root, id) {

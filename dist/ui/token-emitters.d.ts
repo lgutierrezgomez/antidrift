@@ -1,6 +1,8 @@
-import type { Token } from './tokens.js';
+import { type ModeAxis, type Token } from './tokens.js';
 export interface TokenEmitterOptions {
     className?: string;
+    /** Mode axes from ui.json; without them only default values are emitted. */
+    modes?: ModeAxis[];
 }
 export interface TokenEmitter {
     lang: string;

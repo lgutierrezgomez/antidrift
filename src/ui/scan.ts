@@ -5,7 +5,7 @@ import { walkFiles } from '../scanner.js';
 import { loadTokens } from './tokens.js';
 import { readUiConfig, staleTargets, globToRegExp } from './config.js';
 import { listComponentIds, loadComponent, brokenTokenRefs, type Component } from './components.js';
-import type { Token } from './tokens.js';
+import { validateTokenModes, type Token } from './tokens.js';
 import { parseUiTags } from './tags.js';
 import { findColorLiterals, colorIndex, isGeneratedFile, UI_EXTENSIONS, BUILD_SKIP_DIRS } from './hardcoded.js';
 
@@ -42,6 +42,13 @@ export function computeUiScan(root: string): UiScanResult {
     problems.push({ kind: 'invalid-tokens', line: `  tokens: ${(e as Error).message} [invalid-tokens]` });
   }
   const cfg = readUiConfig(root);
+  if (tokensOk)
+    try {
+      validateTokenModes(tokens, cfg.modes);
+    } catch (e) {
+      tokensOk = false;
+      problems.push({ kind: 'invalid-tokens', line: `  tokens: ${(e as Error).message} [invalid-tokens]` });
+    }
   const entityIds = new Set(computeIndex(root).filter((e) => !e.kind).map((e) => e.id));
   const components = new Map<string, Component>();
   for (const id of listComponentIds(root)) {

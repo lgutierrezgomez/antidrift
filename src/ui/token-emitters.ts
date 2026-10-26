@@ -1,7 +1,9 @@
-import type { Token, TokenValue } from './tokens.js';
+import { modeContexts, resolveFor, type ModeAxis, type Token, type TokenValue } from './tokens.js';
 
 export interface TokenEmitterOptions {
   className?: string;
+  /** Mode axes from ui.json; without them only default values are emitted. */
+  modes?: ModeAxis[];
 }
 export interface TokenEmitter {
   lang: string;
@@ -27,6 +29,12 @@ function nameAll(tokens: Map<string, Token>, name: (path: string) => string): Ma
   return out;
 }
 
+const keyOf = (ctx: string[]) => [...ctx].sort().join('+');
+/** The mode value of `axis` in `ctx`, if it isn't the axis default. */
+const valueOn = (axis: ModeAxis, ctx: string[]) => axis.values.slice(1).find((v) => ctx.includes(v));
+/** Does `t` need restating in this exact mode block? (Aliases follow their target through var().) */
+const ownsKey = (t: Token, key: string) => !!t.modes?.[key] && (!t.aliasOf || !!t.ownModeKeys?.includes(key));
+
 // Values below come from validated tokens (see tokens.ts), so they can't carry code.
 const cssHex = (hex: string) => (hex.endsWith('FF') ? hex.slice(0, 7) : hex).toLowerCase();
 
@@ -50,13 +58,30 @@ function cssValue(v: TokenValue): string {
 export const cssTokenEmitter: TokenEmitter = {
   lang: 'css',
   ext: 'css',
-  emit(tokens) {
+  emit(tokens, opts) {
     const names = nameAll(tokens, (p) => `--${p.replace(/\./g, '-')}`);
     const lines = sorted(tokens).map((t) => {
       const value = t.aliasOf ? `var(${names.get(t.aliasOf)})` : cssValue(t.value);
       return `  ${names.get(t.path)}: ${value};`;
     });
-    return `/* ${GENERATED_HEADER} */\n:root {\n${lines.join('\n')}\n}\n`;
+    const blocks = [`:root {\n${lines.join('\n')}\n}`];
+    const axes = opts?.modes ?? [];
+    for (const ctx of modeContexts(axes).slice(1)) {
+      const key = keyOf(ctx);
+      const owned = sorted(tokens).filter((t) => ownsKey(t, key));
+      if (!owned.length) continue;
+      const decls = (indent: string) => owned.map((t) => `${indent}${names.get(t.path)}: ${cssValue(t.modes![key])};`).join('\n');
+      const attrs = (system?: ModeAxis) =>
+        axes.map((a) => (a === system ? `:not([${a.attribute}])` : valueOn(a, ctx) ? `[${a.attribute}="${valueOn(a, ctx)}"]` : '')).join('');
+      blocks.push(`:root${attrs()} {\n${decls('  ')}\n}`);
+      // An axis that follows the system also applies when no explicit choice is set.
+      for (const a of axes) {
+        const v = valueOn(a, ctx);
+        if (a.followSystem && (v === 'dark' || v === 'light'))
+          blocks.push(`@media (prefers-color-scheme: ${v}) {\n  :root${attrs(a)} {\n${decls('    ')}\n  }\n}`);
+      }
+    }
+    return `/* ${GENERATED_HEADER} */\n${blocks.join('\n\n')}\n`;
   },
 };
 
@@ -101,15 +126,17 @@ export const dartTokenEmitter: TokenEmitter = {
     const className = opts?.className ?? 'DsTokens';
     if (!/^[A-Z][A-Za-z0-9_]*$/.test(className)) throw new Error(`invalid Dart class name ${JSON.stringify(className)}`);
     const names = nameAll(tokens, dartName);
-    const lines = sorted(tokens).map((t) => {
-      const value = t.aliasOf ? names.get(t.aliasOf)! : dartValue(t.value);
-      return `  static const ${names.get(t.path)} = ${value};`;
+    const pascal = (v: string) => v.split(/[_-]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join('');
+    // One complete class per mode combination; with no axes that's just the default class.
+    const classes = modeContexts(opts?.modes ?? []).map((ctx) => {
+      const lines = sorted(tokens).map((t) => {
+        const followsTarget = t.aliasOf && !t.ownModeKeys?.some((k) => k.split('+').every((p) => ctx.includes(p)));
+        const value = followsTarget ? names.get(t.aliasOf!)! : dartValue(resolveFor(t, ctx));
+        return `  static const ${names.get(t.path)} = ${value};`;
+      });
+      return `abstract final class ${className}${ctx.map(pascal).join('')} {\n${lines.join('\n')}\n}`;
     });
-    return (
-      `// ${GENERATED_HEADER}\n` +
-      `import 'package:flutter/painting.dart';\n\n` +
-      `abstract final class ${className} {\n${lines.join('\n')}\n}\n`
-    );
+    return `// ${GENERATED_HEADER}\nimport 'package:flutter/painting.dart';\n\n${classes.join('\n\n')}\n`;
   },
 };
 

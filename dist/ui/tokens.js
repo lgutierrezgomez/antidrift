@@ -1,6 +1,8 @@
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { storeDir } from '../store.js';
+export const MODES_EXTENSION = 'com.antidrift.modes';
+const modeKey = (parts) => [...parts].sort().join('+');
 const TYPES = new Set(['color', 'dimension', 'fontFamily', 'fontWeight', 'number', 'duration']);
 const SEGMENT_RE = /^[A-Za-z0-9_-]+$/;
 const ALIAS_RE = /^\{([A-Za-z0-9_.-]+)\}$/;
@@ -27,10 +29,14 @@ export function parseTokenTree(doc, file) {
         if (node.$type !== undefined && !TYPES.has(node.$type))
             throw new Error(`${file}: ${path.join('.') || '(root)'} has unsupported $type ${JSON.stringify(node.$type)}`);
         if ('$value' in node) {
+            const ext = isObj(node.$extensions) ? node.$extensions[MODES_EXTENSION] : undefined;
+            if (ext !== undefined && !isObj(ext))
+                throw new Error(`${file}: ${path.join('.')} ${MODES_EXTENSION} must be an object`);
             out.push({
                 path: path.join('.'),
                 type,
                 raw: node.$value,
+                ...(ext ? { modes: ext } : {}),
                 description: typeof node.$description === 'string' ? node.$description : undefined,
                 file,
             });
@@ -116,6 +122,64 @@ function parseValue(t) {
             return fail('has no $type (set it on the token or a parent group)');
     }
 }
+/** Parse a token's mode overrides with the token's own type; keys are normalized ('savile+dark' → 'dark+savile'). */
+function parseModes(t) {
+    const out = {};
+    for (const [k, raw] of Object.entries(t.modes ?? {})) {
+        if (!/^[A-Za-z0-9_-]+(\+[A-Za-z0-9_-]+)*$/.test(k))
+            throw new Error(`${t.file}: token ${t.path} has an invalid mode name ${JSON.stringify(k)}`);
+        if (typeof raw === 'string' && ALIAS_RE.test(raw))
+            throw new Error(`${t.file}: token ${t.path} mode ${k} must be a literal value, not an alias`);
+        out[modeKey(k.split('+'))] = parseValue({ ...t, path: `${t.path} (mode ${k})`, raw });
+    }
+    return out;
+}
+/** Every combination of non-default mode values, first axis varying fastest; [] is the default context. */
+export function modeContexts(axes) {
+    let out = [[]];
+    for (const a of axes)
+        out = a.values.flatMap((v, i) => out.map((ctx) => (i === 0 ? ctx : [...ctx, v])));
+    return out;
+}
+/** The override keys of `t` that apply in `ctx`, most specific first. */
+const applicable = (t, ctx) => Object.keys(t.modes ?? {})
+    .filter((k) => k.split('+').every((p) => ctx.includes(p)))
+    .sort((a, b) => b.split('+').length - a.split('+').length);
+/** A token's value in a mode context: the most specific applicable override, else its default value. */
+export function resolveFor(t, ctx) {
+    const [best] = applicable(t, ctx);
+    return best ? t.modes[best] : t.value;
+}
+/** Mode names must be declared, one per axis, non-default, and every context must have one most-specific value. */
+export function validateTokenModes(tokens, axes) {
+    const axisOf = new Map();
+    for (const a of axes)
+        a.values.slice(1).forEach((v) => axisOf.set(v, a));
+    const contexts = modeContexts(axes);
+    for (const t of tokens.values()) {
+        if (!t.modes)
+            continue;
+        for (const k of Object.keys(t.modes)) {
+            const seen = new Set();
+            for (const p of k.split('+')) {
+                const a = axisOf.get(p);
+                if (!a)
+                    throw new Error(`token ${t.path} mode "${k}": "${p}" isn't a non-default value of any ui.json "modes" axis`);
+                if (seen.has(a.axis))
+                    throw new Error(`token ${t.path} mode "${k}" names two values of the "${a.axis}" axis`);
+                seen.add(a.axis);
+            }
+        }
+        for (const ctx of contexts) {
+            const keys = applicable(t, ctx);
+            const top = keys.filter((k) => k.split('+').length === keys[0]?.split('+').length);
+            if (top.length > 1) {
+                const need = modeKey(top.flatMap((k) => k.split('+')).filter((p, i, all) => all.indexOf(p) === i));
+                throw new Error(`token ${t.path}: modes ${top.join(' and ')} both apply together; add a "${need}" value`);
+            }
+        }
+    }
+}
 /** Merge raw tokens into resolved tokens: duplicate paths, missing alias targets and cycles are errors. */
 export function resolveTokenTree(entries) {
     const raw = new Map();
@@ -143,10 +207,19 @@ export function resolveTokenTree(entries) {
             if (e.type && e.type !== t.type)
                 throw new Error(`${e.file}: token ${path} is ${e.type} but aliases ${t.type} token ${target}`);
             token = { path, type: t.type, value: t.value, aliasOf: target, description: e.description, file: e.file };
+            const own = parseModes({ ...e, type: t.type });
+            const modes = { ...t.modes, ...own };
+            if (Object.keys(modes).length)
+                token.modes = modes;
+            if (Object.keys(own).length)
+                token.ownModeKeys = Object.keys(own);
         }
         else {
             const value = parseValue(e);
             token = { path, type: value.type, value, description: e.description, file: e.file };
+            const own = parseModes(e);
+            if (Object.keys(own).length)
+                token.modes = own;
         }
         out.set(path, token);
         return token;

@@ -36,6 +36,9 @@ export function colorIndex(tokens) {
         if (t.value.type !== 'color' || t.aliasOf)
             continue;
         out.set(t.value.hex, [...(out.get(t.value.hex) ?? []), t.path]);
+        for (const [key, v] of Object.entries(t.modes ?? {}))
+            if (v.type === 'color')
+                out.set(v.hex, [...(out.get(v.hex) ?? []), `${t.path} (${key})`]);
     }
     return out;
 }
