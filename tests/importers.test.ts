@@ -137,3 +137,25 @@ test('json-schema importer drops a definition-level $id (Zod registry exports se
   const [p] = importJsonSchema(src, 'x');
   expect(p.schema.$id).toBeUndefined();
 });
+
+test('json-schema importer only links refs to sibling definitions, decoded, and notes the rest', () => {
+  const src = JSON.stringify({
+    $defs: {
+      Address: { type: 'object', properties: { zip: { type: 'string' } } },
+      'a/b': { type: 'object' },
+      'User Account': {
+        type: 'object',
+        properties: {
+          zip: { $ref: '#/$defs/Address/properties/zip' },
+          geo: { $ref: 'https://example.com/geo.json' },
+          ab: { $ref: '#/$defs/a~1b' },
+          self: { $ref: '#/$defs/User%20Account' },
+        },
+      },
+    },
+  });
+  const notes: string[] = [];
+  const user = importJsonSchema(src, 'x', notes).find((e) => e.id === 'User-Account')!;
+  expect(user.relationships).toEqual(['Address', 'a-b']);
+  expect(notes).toEqual(['User-Account: external $ref not followed: https://example.com/geo.json']);
+});

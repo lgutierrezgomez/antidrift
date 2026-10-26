@@ -147,3 +147,34 @@ test('tokens and show print mode values', () => {
   );
   expect(cmdShow(root, 'b')).toContain('  primary.default.text → {color.text} = #1F2328  [dark: #E6EDF3]');
 });
+
+test('an alias with its own override resolves the same in CSS, Dart and resolveFor', () => {
+  const t = tokens({
+    color: {
+      $type: 'color',
+      t: { $value: '#111111', $extensions: { [M]: { dark: '#222222', 'dark+savile': '#333333' } } },
+      a: { $value: '{color.t}', $extensions: { [M]: { dark: '#AAAAAA' } } },
+    },
+  });
+  expect(resolveFor(t.get('color.a')!, ['dark', 'savile']).hex).toBe('#333333FF');
+  const css = cssTokenEmitter.emit(t, { modes: AXES });
+  const combo = css.slice(css.indexOf(':root[data-theme="dark"][data-palette="savile"]'));
+  expect(combo.slice(0, combo.indexOf('}'))).toContain('--color-a: #333333;');
+  const dart = dartTokenEmitter.emit(t, { modes: AXES });
+  expect(dart.slice(dart.indexOf('class DsTokensDarkSavile {'))).toContain('static const colorA = Color(0xFF333333);');
+});
+
+test('mode values whose class names would collide are rejected', () => {
+  const root = project([
+    { axis: 'scheme', values: ['light', 'dark'], attribute: 'data-theme' },
+    { axis: 'palette', values: ['base', 'igm-v1', 'igmV1'], attribute: 'data-palette' },
+  ]);
+  expect(() => readUiConfig(root)).toThrow(/igm-v1.*igmV1|igmV1.*igm-v1/);
+  const empty = project([{ axis: 'scheme', values: ['light', '-'], attribute: 'data-theme' }]);
+  expect(() => readUiConfig(empty)).toThrow(/"-"/);
+  const combo = project([
+    { axis: 'scheme', values: ['light', 'dark'], attribute: 'data-theme' },
+    { axis: 'palette', values: ['base', 'savile', 'dark-savile'], attribute: 'data-palette' },
+  ]);
+  expect(() => cmdGenTokens(combo)).toThrow(/DsTokensDarkSavile/);
+});

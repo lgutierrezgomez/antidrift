@@ -29,11 +29,13 @@ test('walkFiles honors skip and the default ignores', () => {
   mkdirSync(join(root, 'node_modules', 'x'), { recursive: true });
   mkdirSync(join(root, 'src'), { recursive: true });
   mkdirSync(join(root, 'build'), { recursive: true });
+  mkdirSync(join(root, 'gen'), { recursive: true });
   writeFileSync(join(root, 'node_modules', 'x', 'a.ts'), '');
   writeFileSync(join(root, 'src', 'a.ts'), '');
   writeFileSync(join(root, 'build', 'b.ts'), '');
+  writeFileSync(join(root, 'gen', 'c.ts'), '');
   const all = [...walkFiles(root)].map((f) => f.rel).sort();
-  expect(all).toEqual(['build/b.ts', 'src/a.ts']);
-  const skipped = [...walkFiles(root, (rel, isDir) => isDir && rel === 'build')].map((f) => f.rel);
+  expect(all).toEqual(['gen/c.ts', 'src/a.ts']);
+  const skipped = [...walkFiles(root, (rel, isDir) => isDir && rel === 'gen')].map((f) => f.rel);
   expect(skipped).toEqual(['src/a.ts']);
 });

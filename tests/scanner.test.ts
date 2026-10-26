@@ -39,3 +39,12 @@ test('scanRepo does not follow symlinks and skips >2MB files', () => {
   symlinkSync(join(root, 'real.ts'), join(root, 'link.ts'));
   expect(scanRepo(root).map((t) => t.id).sort()).toEqual(['a', 'link']);
 });
+
+test('scanRepo skips build output folders that copy source comments (.next, build, .dart_tool…)', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ad-build-'));
+  for (const d of ['.next/server', 'build/web', '.dart_tool/x', 'out', '.svelte-kit', '.nuxt', 'coverage', 'src'])
+    mkdirSync(join(root, d), { recursive: true });
+  for (const d of ['.next/server', 'build/web', '.dart_tool/x', 'out', '.svelte-kit', '.nuxt', 'coverage', 'src'])
+    writeFileSync(join(root, d, 'a.js'), '// antidrift #student@1\n');
+  expect(scanRepo(root).map((t) => t.file)).toEqual([join('src', 'a.js')]);
+});

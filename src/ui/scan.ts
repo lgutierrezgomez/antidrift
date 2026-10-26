@@ -7,7 +7,7 @@ import { readUiConfig, staleTargets, globToRegExp } from './config.js';
 import { listComponentIds, loadComponent, brokenTokenRefs, type Component } from './components.js';
 import { validateTokenModes, type Token } from './tokens.js';
 import { parseUiTags } from './tags.js';
-import { findColorLiterals, colorIndex, isGeneratedFile, isTestFile, stripComments, UI_EXTENSIONS, BUILD_SKIP_DIRS } from './hardcoded.js';
+import { findColorLiterals, colorIndex, isGeneratedFile, isTestFile, stripComments, UI_EXTENSIONS } from './hardcoded.js';
 import { GENERATED_HEADER } from './token-emitters.js';
 
 export interface UiFinding {
@@ -74,8 +74,7 @@ export function computeUiScan(root: string): UiScanResult {
   const colors = colorIndex(tokens);
   let implCount = 0;
   let useCount = 0;
-  const skipDir = (rel: string, isDir: boolean) => isDir && BUILD_SKIP_DIRS.has(rel.split('/').pop()!);
-  for (const { path, rel } of walkFiles(root, skipDir)) {
+  for (const { path, rel } of walkFiles(root)) {
     let content: string;
     try {
       content = readFileSync(path, 'utf8');
@@ -102,7 +101,7 @@ export function computeUiScan(root: string): UiScanResult {
     if (!colors.size || !UI_EXTENSIONS.has(ext) || isGeneratedFile(rel) || isTestFile(rel) || generated.has(rel)) continue;
     if (ignore.some((g) => g.test(rel)) || content.slice(0, 300).includes(GENERATED_HEADER)) continue;
     const original = content.split('\n');
-    stripComments(content).split('\n').forEach((text, i) => {
+    stripComments(content, ext).split('\n').forEach((text, i) => {
       if (original[i].includes('antidrift-allow')) return; // the marker usually sits in a comment
       for (const lit of findColorLiterals(text)) {
         const paths = colors.get(lit.hex);

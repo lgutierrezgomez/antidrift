@@ -1,7 +1,9 @@
 import { readFileSync, readdirSync, lstatSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 const TAG_RE = /antidrift\s+#([A-Za-z0-9_.-]+)@(\d+)/g;
-const IGNORE = new Set(['.git', 'node_modules', '.antidrift', 'dist']);
+/** Build output folders: they hold copies of source comments, so their tags would be duplicates (and go stale on their own). */
+export const BUILD_DIRS = new Set(['build', 'out', '.next', '.nuxt', '.svelte-kit', '.turbo', '.dart_tool', 'Pods', '.gradle', 'coverage']);
+const IGNORE = new Set(['.git', 'node_modules', '.antidrift', 'dist', ...BUILD_DIRS]);
 const MAX_BYTES = 2 * 1024 * 1024;
 export function parseTags(content) {
     const out = [];

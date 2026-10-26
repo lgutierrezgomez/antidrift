@@ -15,7 +15,6 @@ import {
 } from './components.js';
 import { uiConfigPath, staleTargets } from './config.js';
 import { parseUiTags, type ImplTag, type UseTag } from './tags.js';
-import { BUILD_SKIP_DIRS } from './hardcoded.js';
 
 /** `  [dark: #58A6FF, savile: …]` for a token with mode values, else ''. */
 export function formatModes(t: Token | undefined): string {
@@ -40,11 +39,11 @@ export function formatTokenValue(v: TokenValue): string {
   }
 }
 
-/** Every impl/use tag in the repo (build output folders skipped). */
+/** Every impl/use tag in the repo (walkFiles already skips build output folders). */
 export function collectUiTags(root: string): { impls: ImplTag[]; uses: UseTag[] } {
   const impls: ImplTag[] = [];
   const uses: UseTag[] = [];
-  for (const { path, rel } of walkFiles(root, (r, isDir) => isDir && BUILD_SKIP_DIRS.has(r.split('/').pop()!))) {
+  for (const { path, rel } of walkFiles(root)) {
     try {
       const t = parseUiTags(readFileSync(path, 'utf8'), rel);
       impls.push(...t.impls);

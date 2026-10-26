@@ -32,8 +32,20 @@ function nameAll(tokens: Map<string, Token>, name: (path: string) => string): Ma
 const keyOf = (ctx: string[]) => [...ctx].sort().join('+');
 /** The mode value of `axis` in `ctx`, if it isn't the axis default. */
 const valueOn = (axis: ModeAxis, ctx: string[]) => axis.values.slice(1).find((v) => ctx.includes(v));
-/** Does `t` need restating in this exact mode block? (Aliases follow their target through var().) */
-const ownsKey = (t: Token, key: string) => !!t.modes?.[key] && (!t.aliasOf || !!t.ownModeKeys?.includes(key));
+/**
+ * Does `t` need restating in this exact mode block? A plain alias follows its target through var();
+ * an alias with mode values of its own is treated like a regular token over its merged values, so the
+ * cascade picks the same value as resolveFor (an inherited combo can beat its own single-axis value).
+ */
+const ownsKey = (t: Token, key: string) => !!t.modes?.[key] && (!t.aliasOf || !!t.ownModeKeys?.length);
+
+/** PascalCase class-name part for a mode value ('igm-v1' → 'IgmV1'); config uses it to reject collisions. */
+export const modeClassPart = (v: string) =>
+  v
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join('');
 
 // Values below come from validated tokens (see tokens.ts), so they can't carry code.
 const cssHex = (hex: string) => (hex.endsWith('FF') ? hex.slice(0, 7) : hex).toLowerCase();
@@ -126,15 +138,19 @@ export const dartTokenEmitter: TokenEmitter = {
     const className = opts?.className ?? 'DsTokens';
     if (!/^[A-Z][A-Za-z0-9_]*$/.test(className)) throw new Error(`invalid Dart class name ${JSON.stringify(className)}`);
     const names = nameAll(tokens, dartName);
-    const pascal = (v: string) => v.split(/[_-]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join('');
     // One complete class per mode combination; with no axes that's just the default class.
+    const seen = new Map<string, string>();
     const classes = modeContexts(opts?.modes ?? []).map((ctx) => {
+      const name = `${className}${ctx.map(modeClassPart).join('')}`;
+      const label = ctx.join('+') || 'default';
+      if (seen.has(name)) throw new Error(`modes ${seen.get(name)} and ${label} would both generate Dart class ${name}; rename a mode value`);
+      seen.set(name, label);
       const lines = sorted(tokens).map((t) => {
         const followsTarget = t.aliasOf && !t.ownModeKeys?.some((k) => k.split('+').every((p) => ctx.includes(p)));
         const value = followsTarget ? names.get(t.aliasOf!)! : dartValue(resolveFor(t, ctx));
         return `  static const ${names.get(t.path)} = ${value};`;
       });
-      return `abstract final class ${className}${ctx.map(pascal).join('')} {\n${lines.join('\n')}\n}`;
+      return `abstract final class ${name} {\n${lines.join('\n')}\n}`;
     });
     return `// ${GENERATED_HEADER}\nimport 'package:flutter/painting.dart';\n\n${classes.join('\n\n')}\n`;
   },

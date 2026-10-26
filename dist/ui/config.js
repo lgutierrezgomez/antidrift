@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { storeDir } from '../store.js';
 import { loadTokens, tokensDir, validateTokenModes } from './tokens.js';
-import { TOKEN_EMITTERS } from './token-emitters.js';
+import { TOKEN_EMITTERS, modeClassPart } from './token-emitters.js';
 export const uiConfigPath = (root) => join(storeDir(root), 'ui.json');
 /** The UI module is on only when its folders exist — otherwise antidrift behaves as before. */
 export const uiEnabled = (root) => existsSync(tokensDir(root)) || existsSync(join(storeDir(root), 'components'));
@@ -45,6 +45,7 @@ function readModes(raw) {
     if (!Array.isArray(raw))
         throw new Error('ui.json: "modes" must be an array of axes');
     const seen = new Set();
+    const classParts = new Map();
     return raw.map((a) => {
         const where = `ui.json: mode axis ${JSON.stringify(a?.axis)}`;
         if (!a || typeof a.axis !== 'string' || !NAME_RE.test(a.axis))
@@ -56,6 +57,14 @@ function readModes(raw) {
             if (seen.has(v))
                 throw new Error(`${where}: value "${v}" is used twice across axes`);
             seen.add(v);
+            // Mode values name generated Dart classes, so they must stay distinct once PascalCased.
+            const part = modeClassPart(v);
+            if (!part)
+                throw new Error(`${where}: value "${v}" needs at least one letter or digit`);
+            const other = classParts.get(part);
+            if (other)
+                throw new Error(`${where}: values "${other}" and "${v}" would generate the same class name (${part})`);
+            classParts.set(part, v);
         }
         if (typeof a.attribute !== 'string' || !ATTR_RE.test(a.attribute))
             throw new Error(`${where} needs an "attribute" like "data-theme"`);

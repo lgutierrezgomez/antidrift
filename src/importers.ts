@@ -37,42 +37,63 @@ const mk = (id: string, schema: Record<string, unknown>, relationships: string[]
   };
 };
 
-export const importJsonSchema: Importer = (src, name) => {
+const DEFS_REF = /^#\/(?:\$defs|definitions)\/([^/]+)/;
+const OPENAPI_REF = /^#\/components\/schemas\/([^/]+)/;
+
+export const importJsonSchema: Importer = (src, name, notes = []) => {
   const doc = JSON.parse(src);
   const defs = doc.$defs ?? doc.definitions;
   if (defs && typeof defs === 'object')
-    return Object.entries(defs).map(([id, schema]) => {
-      const refs = new Set<string>();
-      collectRefs(schema, refs);
-      refs.delete(id);
-      return mk(id, schema as Record<string, unknown>, [...refs].map(sanitizeId));
-    });
+    return Object.entries(defs).map(([id, schema]) =>
+      mk(id, schema as Record<string, unknown>, relationshipsOf(id, schema, DEFS_REF, notes)),
+    );
   return [mk(name, doc)];
 };
 
-function collectRefs(node: unknown, out: Set<string>): void {
-  if (Array.isArray(node)) node.forEach((n) => collectRefs(n, out));
+const decodePointer = (s: string) => {
+  let d = s.replace(/~1/g, '/').replace(/~0/g, '~');
+  try {
+    d = decodeURIComponent(d);
+  } catch {
+    /* keep as is */
+  }
+  return d;
+};
+
+/**
+ * Entity ids referenced through `$ref`s that point at a sibling definition (`prefix` + name, deeper
+ * pointers count as the definition itself). Refs to other documents can't become relationships; they
+ * are listed in `external`.
+ */
+function collectRefs(node: unknown, prefix: RegExp, out: Set<string>, external: Set<string>): void {
+  if (Array.isArray(node)) node.forEach((n) => collectRefs(n, prefix, out, external));
   else if (node && typeof node === 'object') {
     for (const [k, v] of Object.entries(node)) {
       if (k === '$ref' && typeof v === 'string') {
-        const m = v.match(/\/([^/]+)$/);
-        if (m) out.add(m[1]);
-      } else collectRefs(v, out);
+        const m = v.match(prefix);
+        if (m) out.add(sanitizeId(decodePointer(m[1])));
+        else if (!v.startsWith('#')) external.add(v);
+      } else collectRefs(v, prefix, out, external);
     }
   }
 }
 
-export const importOpenApi: Importer = (src) => {
+/** Relationships for one definition (minus itself), noting refs it can't follow. */
+function relationshipsOf(id: string, schema: unknown, prefix: RegExp, notes: string[]): string[] {
+  const refs = new Set<string>();
+  const external = new Set<string>();
+  collectRefs(schema, prefix, refs, external);
+  refs.delete(sanitizeId(id));
+  for (const x of external) notes.push(`${sanitizeId(id)}: external $ref not followed: ${x}`);
+  return [...refs];
+}
+
+export const importOpenApi: Importer = (src, _name, notes = []) => {
   const doc = (src.trimStart().startsWith('{') ? JSON.parse(src) : yamlLoad(src)) as {
     components?: { schemas?: Record<string, Record<string, unknown>> };
   };
   const schemas = doc?.components?.schemas ?? {};
-  return Object.entries(schemas).map(([id, schema]) => {
-    const refs = new Set<string>();
-    collectRefs(schema, refs);
-    refs.delete(id);
-    return mk(id, schema, [...refs].map(sanitizeId));
-  });
+  return Object.entries(schemas).map(([id, schema]) => mk(id, schema, relationshipsOf(id, schema, OPENAPI_REF, notes)));
 };
 
 const PRISMA_SCALAR: Record<string, string> = {

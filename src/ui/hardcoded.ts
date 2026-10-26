@@ -7,7 +7,7 @@ export interface ColorLiteral {
 }
 
 export const UI_EXTENSIONS = new Set(['css', 'scss', 'less', 'html', 'ts', 'tsx', 'js', 'jsx', 'vue', 'svelte', 'dart', 'kt', 'swift']);
-export const BUILD_SKIP_DIRS = new Set(['build', '.dart_tool', 'Pods', '.next']);
+export { BUILD_DIRS as BUILD_SKIP_DIRS } from '../scanner.js';
 
 export const isGeneratedFile = (rel: string) => /\.(g|freezed)\.dart$|\.min\.[^/]+$/.test(rel);
 
@@ -16,19 +16,28 @@ export const isTestFile = (rel: string) =>
   /(^|\/)(test|tests|__tests__|e2e|integration_test)\//.test(rel) || /\.(test|spec)\.[^/.]+$/.test(rel) || /_test\.dart$/.test(rel);
 
 /**
- * Blank out comments (`//`, `/* *\/`, `<!-- -->`, stray JSDoc `*` lines) outside string literals,
- * keeping every line and column where it was so findings still point at the right place.
+ * Blank out comments outside string literals, keeping every line and column where it was so findings
+ * still point at the right place. Comment syntax follows the file type: `//` only where the language
+ * has it (not CSS or HTML), `<!-- -->` in markup, JS regex literals and Dart/Kotlin/Swift triple-quoted
+ * strings are kept as code.
  */
-export function stripComments(src: string): string {
+export function stripComments(src: string, ext = 'ts'): string {
+  const lineComments = ext !== 'css' && ext !== 'html';
+  const blockComments = ext !== 'html';
+  const htmlComments = ext === 'html' || ext === 'vue' || ext === 'svelte';
+  const regexLiterals = ['ts', 'tsx', 'js', 'jsx', 'vue', 'svelte'].includes(ext);
+  const triple = ext === 'dart' ? ["'''", '"""'] : ext === 'kt' || ext === 'swift' ? ['"""'] : [];
+  const trackQuotes = ext !== 'html'; // apostrophes in markup text aren't strings
   let out = '';
-  let mode: 'code' | 'line' | 'block' | 'html' = 'code';
+  let mode: 'code' | 'line' | 'block' | 'html' | 'regex' = 'code';
   let quote = '';
-  const lineStart = (i: number) => i === 0 || src[i - 1] === '\n';
+  let inClass = false; // inside a regex [...] class
+  let prev = ''; // last non-space code character, to tell a regex from a division
   for (let i = 0; i < src.length; i++) {
     const c = src[i];
     if (c === '\n') {
-      if (mode === 'line') mode = 'code';
-      if (quote && quote !== '`') quote = '';
+      if (mode === 'line' || mode === 'regex') mode = 'code';
+      if (quote.length === 1 && quote !== '`') quote = '';
       out += c;
       continue;
     }
@@ -45,29 +54,53 @@ export function stripComments(src: string): string {
       } else out += ' ';
       continue;
     }
+    if (mode === 'regex') {
+      out += c;
+      if (c === '\\') {
+        out += src[i + 1] ?? '';
+        i++;
+      } else if (c === '[') inClass = true;
+      else if (c === ']') inClass = false;
+      else if (c === '/' && !inClass) {
+        mode = 'code';
+        prev = '/';
+      }
+      continue;
+    }
     if (quote) {
       if (c === '\\') {
         out += c + (src[i + 1] ?? '');
         i++;
         continue;
       }
-      if (c === quote) quote = '';
+      if (src.startsWith(quote, i)) {
+        out += quote;
+        i += quote.length - 1;
+        quote = '';
+        prev = c;
+        continue;
+      }
       out += c;
       continue;
     }
-    if (lineStart(i)) {
-      const m = src.slice(i).match(/^[ \t]*\*(?=\s|$|\/)/);
-      if (m && !src.startsWith('*/', i + m[0].length - 1)) {
-        mode = 'line';
-        out += ' ';
-        continue;
-      }
+    const opener = trackQuotes ? (triple.find((q) => src.startsWith(q, i)) ?? (c === '"' || c === "'" || c === '`' ? c : '')) : '';
+    if (opener) {
+      quote = opener;
+      out += opener;
+      i += opener.length - 1;
+      continue;
     }
-    if (c === '/' && src[i + 1] === '/') mode = 'line';
-    else if (c === '/' && src[i + 1] === '*') mode = 'block';
-    else if (src.startsWith('<!--', i)) mode = 'html';
-    else if (c === '"' || c === "'" || c === '`') quote = c;
+    if (c === '/' && src[i + 1] === '/' && lineComments) mode = 'line';
+    else if (c === '/' && src[i + 1] === '*' && blockComments) mode = 'block';
+    else if (htmlComments && src.startsWith('<!--', i)) mode = 'html';
+    else if (c === '/' && regexLiterals && (prev === '' || '(,=:[!&|?{};+-*%<>~^'.includes(prev))) {
+      mode = 'regex';
+      inClass = false;
+      out += c;
+      continue;
+    }
     out += mode === 'code' ? c : ' ';
+    if (mode === 'code' && c.trim()) prev = c;
   }
   return out;
 }
@@ -104,10 +137,12 @@ export function findColorLiterals(line: string): ColorLiteral[] {
 export function colorIndex(tokens: Map<string, Token>): Map<string, string[]> {
   const out = new Map<string, string[]>();
   for (const t of [...tokens.values()].sort((a, b) => (a.path < b.path ? -1 : 1))) {
-    if (t.value.type !== 'color' || t.aliasOf) continue;
-    out.set(t.value.hex, [...(out.get(t.value.hex) ?? []), t.path]);
+    if (t.value.type !== 'color') continue;
+    if (!t.aliasOf) out.set(t.value.hex, [...(out.get(t.value.hex) ?? []), t.path]);
+    // An alias's inherited values are indexed under its target; only its own mode values are new.
     for (const [key, v] of Object.entries(t.modes ?? {}))
-      if (v.type === 'color') out.set(v.hex, [...(out.get(v.hex) ?? []), `${t.path} (${key})`]);
+      if (v.type === 'color' && (!t.aliasOf || t.ownModeKeys?.includes(key)))
+        out.set(v.hex, [...(out.get(v.hex) ?? []), `${t.path} (${key})`]);
   }
   return out;
 }

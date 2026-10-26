@@ -6,7 +6,6 @@ import { loadTokens, loadRawTokens, parseTokenTree, resolveTokenTree, tokensDir 
 import { componentsDir, listComponentIds, loadComponent, readComponent, reconcileComponent, resolveMatrix, brokenTokenRefs, } from './components.js';
 import { uiConfigPath, staleTargets } from './config.js';
 import { parseUiTags } from './tags.js';
-import { BUILD_SKIP_DIRS } from './hardcoded.js';
 /** `  [dark: #58A6FF, savile: …]` for a token with mode values, else ''. */
 export function formatModes(t) {
     const entries = Object.entries(t?.modes ?? {}).sort(([a], [b]) => (a < b ? -1 : 1));
@@ -28,11 +27,11 @@ export function formatTokenValue(v) {
             return `${v.ms}ms`;
     }
 }
-/** Every impl/use tag in the repo (build output folders skipped). */
+/** Every impl/use tag in the repo (walkFiles already skips build output folders). */
 export function collectUiTags(root) {
     const impls = [];
     const uses = [];
-    for (const { path, rel } of walkFiles(root, (r, isDir) => isDir && BUILD_SKIP_DIRS.has(r.split('/').pop()))) {
+    for (const { path, rel } of walkFiles(root)) {
         try {
             const t = parseUiTags(readFileSync(path, 'utf8'), rel);
             impls.push(...t.impls);

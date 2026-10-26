@@ -1,4 +1,6 @@
 import type { UsageTag } from './types.js';
+/** Build output folders: they hold copies of source comments, so their tags would be duplicates (and go stale on their own). */
+export declare const BUILD_DIRS: Set<string>;
 export declare function parseTags(content: string): Array<{
     id: string;
     version: number;

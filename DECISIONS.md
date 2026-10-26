@@ -124,3 +124,28 @@ Opt-in: nothing changes until `.antidrift/tokens/` or `.antidrift/components/` e
 - **Skill: follow the mapping** — tag files that convert an entity into another shape even when they
   don't import its type (the trial missed the Flutter domain models this way).
 - `ui.json` that isn't a JSON object now errors clearly (was a TypeError).
+
+### Wave 6 review (independent reviewer, 2b029b9..e5f3cfb) — fixed
+- An alias with its own mode values is emitted in CSS like a regular token over its merged values, so
+  CSS, Dart and `resolveFor` agree (an inherited `dark+savile` beats the alias's own `dark`).
+- Comment stripping is per file type: no `//` comments in CSS/HTML, no `/* */` in HTML, JS regex
+  literals and Dart/Kotlin/Swift triple-quoted strings stay code, no quote tracking in HTML text, and
+  the stray-`*`-line heuristic is gone (it blanked CSS `*` selectors). Code is never blanked silently.
+- json-schema/OpenAPI importers only link `$ref`s to sibling definitions (deeper pointers count as the
+  definition), decode `~1`/`~0`/percent-encoding before sanitizing, and list external refs in `notes:`.
+- Mode values must stay distinct (and non-empty) once PascalCased; Dart generation refuses two
+  combinations that would produce the same class name.
+- `colorIndex` includes an alias's own mode values.
+- Found while verifying: the entity scanner walked build output (`.next/`, `build/`…), so a rebuilt
+  Next app duplicated every tag (142 → 1050 on the trial project). All walks now skip
+  `build out .next .nuxt .svelte-kit .turbo .dart_tool Pods .gradle coverage`.
+
+### Deferred minors (reviewer; none affect correctness of shipped output)
+- `{"dark+savile": X, "savile+dark": Y}` merges silently (last wins) instead of erroring.
+- Two axes may share an `attribute`; `followSystem` on an axis without light/dark emits nothing — not
+  validated. Following the system requires the attribute to be absent (`data-theme="auto"` won't).
+- The ambiguity error for an alias doesn't say which value came from its target.
+- Comment stripping: JSX text like `src/*.ts` can still open a block comment; nested template
+  literals can flip quote state (noise, not misses).
+- `isTestFile` misses `spec/`, `__mocks__/`, `*.stories.*`; skips a real `pages/test/` route.
+- `show --full <id>` (flag before id) isn't recognized.

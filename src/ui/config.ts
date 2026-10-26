@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { storeDir } from '../store.js';
 import { loadTokens, tokensDir, validateTokenModes, type ModeAxis, type Token } from './tokens.js';
-import { TOKEN_EMITTERS } from './token-emitters.js';
+import { TOKEN_EMITTERS, modeClassPart } from './token-emitters.js';
 
 export interface UiTarget {
   lang: string;
@@ -53,6 +53,7 @@ function readModes(raw: unknown): ModeAxis[] {
   if (raw === undefined) return [];
   if (!Array.isArray(raw)) throw new Error('ui.json: "modes" must be an array of axes');
   const seen = new Set<string>();
+  const classParts = new Map<string, string>();
   return raw.map((a: Record<string, unknown>) => {
     const where = `ui.json: mode axis ${JSON.stringify(a?.axis)}`;
     if (!a || typeof a.axis !== 'string' || !NAME_RE.test(a.axis)) throw new Error('ui.json: every mode axis needs an "axis" name');
@@ -62,6 +63,12 @@ function readModes(raw: unknown): ModeAxis[] {
     for (const v of values as string[]) {
       if (seen.has(v)) throw new Error(`${where}: value "${v}" is used twice across axes`);
       seen.add(v);
+      // Mode values name generated Dart classes, so they must stay distinct once PascalCased.
+      const part = modeClassPart(v);
+      if (!part) throw new Error(`${where}: value "${v}" needs at least one letter or digit`);
+      const other = classParts.get(part);
+      if (other) throw new Error(`${where}: values "${other}" and "${v}" would generate the same class name (${part})`);
+      classParts.set(part, v);
     }
     if (typeof a.attribute !== 'string' || !ATTR_RE.test(a.attribute)) throw new Error(`${where} needs an "attribute" like "data-theme"`);
     return { axis: a.axis, values: values as string[], attribute: a.attribute, ...(a.followSystem === true ? { followSystem: true } : {}) };
