@@ -47,7 +47,13 @@ test('show lists incoming and outgoing relationships', () => {
   const out = cmdShow(root, 'student');
   expect(out).toContain('Relationships:');
   expect(out).toContain('course');
-  expect(out).toContain('Referenced by:');
+  expect(out).toMatch(/Referenced by:\n\s+#course\b/);
+  expect(cmdShow(root, 'course')).toMatch(/Referenced by:\n\s+#student\b/);
+});
+test('import output surfaces importer notes', () => {
+  writeFileSync(join(root, 's.graphql'), 'scalar DateTime type Teacher { born: DateTime }');
+  const msg = cmdImport(root, 'graphql', join(root, 's.graphql'));
+  expect(msg).toContain('Teacher.born: skipped custom scalar "DateTime"');
 });
 test('import writes entity files and builds the index', () => {
   writeFileSync(join(root, 's.json'), JSON.stringify({ $defs: { Teacher: { type: 'object' } } }));

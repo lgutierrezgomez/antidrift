@@ -169,9 +169,13 @@ browser bundle.
 version 1:
 - **json-schema** — `$defs`/`definitions`, or the whole doc as one entity.
 - **openapi** — `components.schemas`; `$ref`s become relationships.
-- **prisma** — `model` blocks (scalars → properties, `?`/`[]` honored, relations → relationships).
-  Parsed by a light in-repo parser; enums/composite types are skipped.
-- **graphql** — `type`/`input` definitions; object-typed fields become relationships.
+- **prisma** — `model` blocks (scalars → properties, `?`/`[]` honored, relations → relationships,
+  `enum` blocks → `{ "enum": [...] }`). Parsed by a light in-repo parser; composite and
+  `Unsupported(...)` types are skipped.
+- **graphql** — `type`/`input` definitions; object-typed fields become relationships, `enum` types
+  become `{ "enum": [...] }`. Custom scalars and interface/union fields are skipped.
+
+Anything an importer skips is listed under `notes:` in the import output, so you can add it by hand.
 
 ## Type generation
 

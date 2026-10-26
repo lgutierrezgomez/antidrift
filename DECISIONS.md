@@ -70,3 +70,17 @@ Shipped all four; 45 tests, clean build, pushed to GitHub. Decisions:
 - **Cheaper tags = guidance only.** The scanner already accepts one tag per file; the skill now says
   so. Import-based usage inference was skipped (language-specific).
 - **Not done:** DB-only-field guidance is docs (README + skill), not enforcement.
+
+## Wave 4 (deferred minors from waves 1–2), v0.3.0
+- **Importer enums:** Prisma `enum` blocks and GraphQL `enum` types now import as `{ enum: [...] }`
+  (they feed the `*.enums.ts` file) instead of being dropped.
+- **Importer notes:** importers take an optional `notes` array; whatever they still skip (Prisma
+  `Unsupported(...)`/composite types, GraphQL custom scalars and interface/union fields) is listed
+  under `notes:` in `import` output instead of vanishing silently.
+- **`tag` target** must match `<file>:<digits>`; anything else errors with the expected form (was a
+  confusing ENOENT).
+- **Dot-only ids** (`.`, `..`) are rejected by `entityPath`.
+- **Hook glob tightened:** only files directly in `.antidrift/entities/` (absolute or relative path)
+  trigger it; `x.antidrift/…` and nested folders are ignored.
+- **Cleanup:** removed the dead `SLASH` set; dropped `@types/js-yaml` (v4 types) since js-yaml v5
+  ships its own; the `show` incoming-relationship test now asserts the actual referrer.

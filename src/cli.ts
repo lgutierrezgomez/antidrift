@@ -110,9 +110,10 @@ export function cmdNotify(root: string, id: string): string {
 }
 
 export function cmdTag(root: string, id: string, target: string): string {
-  const i = target.lastIndexOf(':');
-  const file = target.slice(0, i);
-  const line = Number(target.slice(i + 1));
+  const m = target.match(/^(.+):(\d+)$/);
+  if (!m) throw new Error(`expected <file:line>, got ${JSON.stringify(target)}`);
+  const file = m[1];
+  const line = Number(m[2]);
   const version = readEntity(root, id).version; // throws if id invalid/missing
   const lines = readFileSync(file, 'utf8').split('\n');
   if (!Number.isInteger(line) || line < 1 || line > lines.length + 1) throw new Error(`line ${line} out of range for ${file}`);
@@ -125,12 +126,14 @@ export function cmdTag(root: string, id: string, target: string): string {
 export function cmdImport(root: string, format: string, file: string): string {
   const importer = IMPORTERS[format];
   if (!importer) throw new Error(`unknown import format: ${format} (have: ${Object.keys(IMPORTERS).join(', ')})`);
-  const entities = importer(readFileSync(file, 'utf8'), basename(file).replace(/\.[^.]+$/, ''));
+  const notes: string[] = [];
+  const entities = importer(readFileSync(file, 'utf8'), basename(file).replace(/\.[^.]+$/, ''), notes);
   // Validate all schemas before writing any — import is all-or-nothing.
   for (const e of entities) assertValidSchema(e.id, e.schema);
   for (const e of entities) writeEntity(root, e);
   buildIndex(root);
-  return `imported ${entities.length} entity file(s) from ${file}`;
+  const msg = `imported ${entities.length} entity file(s) from ${file}`;
+  return notes.length ? `${msg}\nnotes:\n${notes.map((n) => `  ${n}`).join('\n')}` : msg;
 }
 
 export async function cmdGenTypes(root: string, lang = 'ts', out?: string): Promise<string> {

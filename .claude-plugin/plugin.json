@@ -1,7 +1,7 @@
 {
   "name": "antidrift",
   "displayName": "antidrift",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Single-source-of-truth registry + drift tracking for data entities. Describe entities once in JSON Schema; keep front, back, and AI agents in sync and flag drift.",
   "author": {
     "name": "Leonardo Gutiérrez Gómez",

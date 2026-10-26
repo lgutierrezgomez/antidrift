@@ -2,7 +2,8 @@ import { load as yamlLoad } from 'js-yaml';
 import { parse, Kind, type TypeNode } from 'graphql';
 import type { Entity } from './types.js';
 
-export type Importer = (src: string, name: string) => Entity[];
+/** `notes` collects human-readable warnings about input that was skipped. */
+export type Importer = (src: string, name: string, notes?: string[]) => Entity[];
 
 export const sanitizeId = (s: string) => s.replace(/[^A-Za-z0-9_.-]/g, '-');
 
@@ -71,9 +72,15 @@ const PRISMA_SCALAR: Record<string, string> = {
   Bytes: 'string',
 };
 
-export const importPrisma: Importer = (src) => {
+export const importPrisma: Importer = (src, _name, notes = []) => {
   const models = [...src.matchAll(/model\s+(\w+)\s*\{([^}]*)\}/g)];
   const names = new Set(models.map((m) => m[1]));
+  const enums = new Map(
+    [...src.matchAll(/enum\s+(\w+)\s*\{([^}]*)\}/g)].map(([, n, body]) => [
+      n,
+      body.split('\n').map((l) => l.trim().match(/^(\w+)/)?.[1]).filter((v): v is string => !!v),
+    ]),
+  );
   return models.map(([, name, body]) => {
     const properties: Record<string, unknown> = {};
     const required: string[] = [];
@@ -86,9 +93,12 @@ export const importPrisma: Importer = (src) => {
         relationships.push(sanitizeId(type));
         continue;
       }
-      const js = PRISMA_SCALAR[type];
-      if (!js) continue; // enum / unknown — skip (documented limitation)
-      properties[field] = arr ? { type: 'array', items: { type: js } } : { type: js };
+      const item = enums.has(type) ? { enum: enums.get(type) } : PRISMA_SCALAR[type] ? { type: PRISMA_SCALAR[type] } : null;
+      if (!item) {
+        notes.push(`${name}.${field}: skipped unsupported type "${type}"`);
+        continue;
+      }
+      properties[field] = arr ? { type: 'array', items: item } : item;
       if (!opt && !arr) required.push(field);
     }
     const schema: Record<string, unknown> = { type: 'object', properties };
@@ -115,8 +125,14 @@ function unwrapGql(t: TypeNode): { name: string; required: boolean; list: boolea
   return { name: node.kind === Kind.NAMED_TYPE ? node.name.value : '', required, list };
 }
 
-export const importGraphql: Importer = (src) => {
+export const importGraphql: Importer = (src, _name, notes = []) => {
   const doc = parse(src);
+  const enums = new Map<string, string[]>();
+  const scalars = new Set<string>();
+  for (const d of doc.definitions) {
+    if (d.kind === Kind.ENUM_TYPE_DEFINITION) enums.set(d.name.value, (d.values ?? []).map((v) => v.name.value));
+    if (d.kind === Kind.SCALAR_TYPE_DEFINITION) scalars.add(d.name.value);
+  }
   const objs = doc.definitions.filter(
     (d) => d.kind === Kind.OBJECT_TYPE_DEFINITION || d.kind === Kind.INPUT_OBJECT_TYPE_DEFINITION,
   ) as Array<{ name: { value: string }; fields?: ReadonlyArray<{ name: { value: string }; type: TypeNode }> }>;
@@ -131,9 +147,13 @@ export const importGraphql: Importer = (src) => {
         relationships.push(sanitizeId(u.name));
         continue;
       }
-      const js = GQL_SCALAR[u.name];
-      if (!js) continue;
-      properties[f.name.value] = u.list ? { type: 'array', items: { type: js } } : { type: js };
+      const item = enums.has(u.name) ? { enum: enums.get(u.name) } : GQL_SCALAR[u.name] ? { type: GQL_SCALAR[u.name] } : null;
+      if (!item) {
+        const kind = scalars.has(u.name) ? 'custom scalar' : 'unsupported type';
+        notes.push(`${def.name.value}.${f.name.value}: skipped ${kind} "${u.name}"`);
+        continue;
+      }
+      properties[f.name.value] = u.list ? { type: 'array', items: item } : item;
       if (u.required && !u.list) required.push(f.name.value);
     }
     const schema: Record<string, unknown> = { type: 'object', properties };

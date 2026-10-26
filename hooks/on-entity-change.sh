@@ -11,7 +11,8 @@ input="$(cat)"
 file="$(printf '%s' "$input" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const j=JSON.parse(s);process.stdout.write((j.tool_input&&j.tool_input.file_path)||"")}catch{process.stdout.write("")}})')"
 
 case "$file" in
-  *.antidrift/entities/*.json)
+  .antidrift/entities/*/*|*/.antidrift/entities/*/*) ;; # nested — not an entity file
+  .antidrift/entities/*.json|*/.antidrift/entities/*.json)
     id="$(basename "$file" .json)"
     if [ -z "${CLAUDE_PLUGIN_ROOT:-}" ]; then
       emit "antidrift: CLAUDE_PLUGIN_ROOT is not set — cannot check drift for #$id."

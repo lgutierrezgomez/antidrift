@@ -75,3 +75,38 @@ components:
 test('importJsonSchema throws on malformed input', () => {
   expect(() => importJsonSchema('not json at all', 'x')).toThrow();
 });
+test('prisma importer maps enums to JSON Schema enum and notes unsupported fields', () => {
+  const src = `
+enum Level {
+  BEGINNER
+  ADVANCED @map("adv")
+  @@map("levels")
+}
+model Student {
+  id    Int     @id
+  level Level
+  tags  Level[]
+  geo   Unsupported("geometry")?
+}`;
+  const notes: string[] = [];
+  const s = importPrisma(src, 'schema', notes).find((e) => e.id === 'Student')!;
+  expect(s.schema.properties).toMatchObject({
+    level: { enum: ['BEGINNER', 'ADVANCED'] },
+    tags: { type: 'array', items: { enum: ['BEGINNER', 'ADVANCED'] } },
+  });
+  expect(s.schema.required).toEqual(['id', 'level']);
+  expect(notes).toEqual(['Student.geo: skipped unsupported type "Unsupported"']);
+});
+test('graphql importer maps enums and notes custom scalars', () => {
+  const src = `scalar DateTime enum Level { BEGINNER ADVANCED } type Student { level: Level! born: DateTime }`;
+  const notes: string[] = [];
+  const s = importGraphql(src, 'schema', notes).find((e) => e.id === 'Student')!;
+  expect(s.schema.properties).toEqual({ level: { enum: ['BEGINNER', 'ADVANCED'] } });
+  expect(s.schema.required).toEqual(['level']);
+  expect(notes).toEqual(['Student.born: skipped custom scalar "DateTime"']);
+});
+test('graphql importer notes interface/union fields as unsupported, not as scalars', () => {
+  const notes: string[] = [];
+  importGraphql(`interface Node { id: ID! } type Student { node: Node }`, 'schema', notes);
+  expect(notes).toEqual(['Student.node: skipped unsupported type "Node"']);
+});

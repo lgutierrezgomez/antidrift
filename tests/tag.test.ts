@@ -24,3 +24,9 @@ test('tag uses # for .py and errors on an out-of-range line', () => {
   expect(readFileSync(join(root, 'b.py'), 'utf8')).toBe('# antidrift #student@3\nuse_student()\n');
   expect(() => cmdTag(root, 'student', join(root, 'b.py') + ':99')).toThrow();
 });
+
+test('tag without a :line explains the expected form', () => {
+  writeFileSync(join(root, 'c.ts'), 'x\n');
+  expect(() => cmdTag(root, 'student', join(root, 'c.ts'))).toThrow(/<file:line>/);
+  expect(() => cmdTag(root, 'student', join(root, 'c.ts') + ':abc')).toThrow(/<file:line>/);
+});

@@ -48,5 +48,8 @@ test('computeIndex returns entries without writing index.json', () => {
 test('entityPath rejects empty and path-traversal ids', () => {
   expect(() => S.entityPath(root, '')).toThrow();
   expect(() => S.entityPath(root, '../evil')).toThrow();
+  expect(() => S.entityPath(root, '.')).toThrow();
+  expect(() => S.entityPath(root, '..')).toThrow();
+  expect(() => S.entityPath(root, 'v1.2')).not.toThrow();
   expect(() => S.entityPath(root, 'student')).not.toThrow();
 });

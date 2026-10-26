@@ -42,3 +42,21 @@ test('hook surfaces a diagnostic when CLAUDE_PLUGIN_ROOT is unset', () => {
   const ctx = JSON.parse(out).hookSpecificOutput.additionalContext as string;
   expect(ctx).toContain('CLAUDE_PLUGIN_ROOT');
 });
+
+test('hook ignores json outside the entities folder itself', () => {
+  const env = { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT };
+  expect(runHook(join(proj, 'x.antidrift', 'entities', 'student.json'), env).trim()).toBe('');
+  expect(runHook(join(proj, '.antidrift', 'entities', 'nested', 'student.json'), env).trim()).toBe('');
+});
+
+test('hook accepts a relative entity path', () => {
+  const input = JSON.stringify({ tool_input: { file_path: '.antidrift/entities/student.json' } });
+  const out = execFileSync('bash', [HOOK], { input, cwd: proj, env: { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT }, encoding: 'utf8' });
+  expect(JSON.parse(out).hookSpecificOutput.additionalContext).toContain('app.ts:1');
+});
+
+test('hook ignores a nested relative path under entities', () => {
+  const input = JSON.stringify({ tool_input: { file_path: '.antidrift/entities/nested/student.json' } });
+  const out = execFileSync('bash', [HOOK], { input, cwd: proj, env: { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT }, encoding: 'utf8' });
+  expect(out.trim()).toBe('');
+});
