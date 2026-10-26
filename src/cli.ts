@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import { fileURLToPath } from 'node:url';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
-import { buildIndex, computeIndex, readEntity, readAllEntities, writeEntity, assertValidSchema, reconcileEntity, initStore, storeDir } from './store.js';
+import { buildIndex, computeIndex, entityPath, readEntity, readAllEntities, writeEntity, assertValidSchema, reconcileEntity, initStore, storeDir } from './store.js';
 import { scanRepo } from './scanner.js';
 import { computeDrift, problems } from './drift.js';
 import { computeBrokenRefs, computeDerivedDrift, type BrokenRef, type DerivedDrift } from './relationships.js';
@@ -11,16 +11,28 @@ import { IMPORTERS } from './importers.js';
 import { EMITTERS } from './emitters.js';
 import { readUiConfig, generateTarget, uiEnabled, type UiTarget } from './ui/config.js';
 import { computeUiScan, type UiScanResult } from './ui/scan.js';
+import { componentPath, readComponent } from './ui/components.js';
+import { cmdShowComponent, cmdTokens, cmdNotifyComponent, cmdNotifyTokens, cmdImportTokens, cmdUiInit } from './ui/commands.js';
 import { loadTokens } from './ui/tokens.js';
 import type { DriftItem } from './types.js';
 
+export { cmdShowComponent, cmdTokens, cmdNotifyTokens, cmdUiInit };
+
+/** A component (not an entity) owns this id. */
+const isComponent = (root: string, id: string) => !existsSync(entityPath(root, id)) && existsSync(componentPath(root, id));
+
 export function cmdList(root: string): string {
   const index = computeIndex(root);
-  if (index.length === 0) return 'No entities. Run `antidrift init`, then add files under .antidrift/entities/.';
-  return index.map((e) => `#${e.id}@${e.version}  ${e.title} — ${e.summary}`).join('\n');
+  const tokenCount = loadTokens(root).size;
+  if (index.length === 0 && tokenCount === 0) return 'No entities. Run `antidrift init`, then add files under .antidrift/entities/.';
+  return [
+    ...index.map((e) => `#${e.id}@${e.version}  ${e.kind === 'component' ? '[component] ' : ''}${e.title} — ${e.summary}`),
+    ...(tokenCount ? [`${tokenCount} token(s) — run tokens to list them`] : []),
+  ].join('\n');
 }
 
 export function cmdShow(root: string, id: string): string {
+  if (isComponent(root, id)) return cmdShowComponent(root, id);
   const e = readEntity(root, id);
   const index = computeIndex(root);
   const known = new Set(index.map((x) => x.id));
@@ -99,6 +111,7 @@ export function cmdScan(root: string): {
 }
 
 export function cmdNotify(root: string, id: string): string {
+  if (isComponent(root, id)) return cmdNotifyComponent(root, id);
   const entity = reconcileEntity(root, id);
   const index = buildIndex(root);
   const stale = computeDrift(scanRepo(root), index).filter((d) => d.tag.id === id && d.status === 'stale');
@@ -122,21 +135,30 @@ export function cmdNotify(root: string, id: string): string {
   return parts.join('\n');
 }
 
-export function cmdTag(root: string, id: string, target: string): string {
+export type TagMode = { kind: 'impl' } | { kind: 'use'; variant?: string };
+
+export function cmdTag(root: string, id: string, target: string, mode?: TagMode): string {
   const m = target.match(/^(.+):(\d+)$/);
   if (!m) throw new Error(`expected <file:line>, got ${JSON.stringify(target)}`);
   const file = m[1];
   const line = Number(m[2]);
-  const version = readEntity(root, id).version; // throws if id invalid/missing
+  let text: string;
+  if (mode) {
+    const c = readComponent(root, id); // throws if id invalid/missing
+    if (mode.kind === 'use' && mode.variant && !c.variants.includes(mode.variant))
+      throw new Error(`#${id} has no variant "${mode.variant}" (have: ${c.variants.join(', ')})`);
+    text = mode.kind === 'impl' ? `antidrift impl #${id}@${c.version}` : `antidrift use #${id}${mode.variant ? `:${mode.variant}` : ''}`;
+  } else text = `antidrift #${id}@${readEntity(root, id).version}`; // throws if id invalid/missing
   const lines = readFileSync(file, 'utf8').split('\n');
   if (!Number.isInteger(line) || line < 1 || line > lines.length + 1) throw new Error(`line ${line} out of range for ${file}`);
   const [pre, post] = commentSyntax(file);
-  lines.splice(line - 1, 0, `${pre}antidrift #${id}@${version}${post}`);
+  lines.splice(line - 1, 0, `${pre}${text}${post}`);
   writeFileSync(file, lines.join('\n'));
-  return `tagged ${file}:${line} with #${id}@${version}`;
+  return `tagged ${file}:${line} with ${text.replace(/^antidrift /, '')}`;
 }
 
 export function cmdImport(root: string, format: string, file: string): string {
+  if (format === 'tokens') return cmdImportTokens(root, file);
   const importer = IMPORTERS[format];
   if (!importer) throw new Error(`unknown import format: ${format} (have: ${Object.keys(IMPORTERS).join(', ')})`);
   const notes: string[] = [];
@@ -180,7 +202,15 @@ export function cmdGenTokens(root: string, lang?: string, out?: string): string 
 }
 
 const USAGE =
-  'usage: antidrift <init|list|show <id>|scan|reconcile <id>|notify <id>|tag <id> <file:line>|import <format> <file>|gen-types [lang] [out]|gen-tokens [lang out]>';
+  'usage: antidrift <init|list|show <id>|scan|reconcile <id>|notify <id>|tag <id> <file:line>|import <format> <file>|gen-types [lang] [out]|gen-tokens [lang out]|tokens [prefix]|notify-tokens|ui init>';
+
+function parseTagMode(flag: string | undefined): TagMode | undefined {
+  if (!flag) return undefined;
+  if (flag === '--impl') return { kind: 'impl' };
+  const m = flag.match(/^--use(?:=([A-Za-z0-9_-]+))?$/);
+  if (m) return { kind: 'use', ...(m[1] ? { variant: m[1] } : {}) };
+  throw new Error(`unknown tag flag ${flag} (use --impl, --use or --use=<variant>)`);
+}
 function requireArg(arg: string | undefined, what: string): string {
   if (!arg) throw new Error(`missing <${what}>. ${USAGE}`);
   return arg;
@@ -214,13 +244,23 @@ async function main(): Promise<void> {
         console.log(cmdNotify(root, requireArg(arg, 'id')));
         break;
       case 'tag':
-        console.log(cmdTag(root, requireArg(arg, 'id'), requireArg(process.argv[4], 'file:line')));
+        console.log(cmdTag(root, requireArg(arg, 'id'), requireArg(process.argv[4], 'file:line'), parseTagMode(process.argv[5])));
         break;
       case 'import':
         console.log(cmdImport(root, requireArg(arg, 'format'), requireArg(process.argv[4], 'file')));
         break;
       case 'gen-types':
         console.log(await cmdGenTypes(root, arg ?? 'ts', process.argv[4]));
+        break;
+      case 'tokens':
+        console.log(cmdTokens(root, arg));
+        break;
+      case 'notify-tokens':
+        console.log(cmdNotifyTokens(root));
+        break;
+      case 'ui':
+        if (arg !== 'init') throw new Error(`unknown ui subcommand: ${arg ?? '(none)'}. ${USAGE}`);
+        console.log(cmdUiInit(root));
         break;
       case 'gen-tokens':
         console.log(cmdGenTokens(root, arg, process.argv[4]));

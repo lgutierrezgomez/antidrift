@@ -18,7 +18,7 @@ export interface Token {
   description?: string;
   file: string;
 }
-interface RawToken {
+export interface RawToken {
   path: string;
   type?: TokenType;
   raw: unknown;
@@ -169,9 +169,10 @@ export function resolveTokenTree(entries: RawToken[]): Map<string, Token> {
   return out;
 }
 
-export function loadTokens(root: string): Map<string, Token> {
+/** Raw (unresolved) tokens from every file in .antidrift/tokens/, in file-name order. */
+export function loadRawTokens(root: string): RawToken[] {
   const dir = tokensDir(root);
-  if (!existsSync(dir)) return new Map();
+  if (!existsSync(dir)) return [];
   const entries: RawToken[] = [];
   for (const name of readdirSync(dir).filter((f) => f.endsWith('.json')).sort()) {
     let doc: unknown;
@@ -182,5 +183,7 @@ export function loadTokens(root: string): Map<string, Token> {
     }
     entries.push(...parseTokenTree(doc, name));
   }
-  return resolveTokenTree(entries);
+  return entries;
 }
+
+export const loadTokens = (root: string): Map<string, Token> => resolveTokenTree(loadRawTokens(root));
