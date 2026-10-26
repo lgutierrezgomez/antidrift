@@ -9,7 +9,8 @@ import { computeBrokenRefs, computeDerivedDrift, type BrokenRef, type DerivedDri
 import { commentSyntax } from './comment.js';
 import { IMPORTERS } from './importers.js';
 import { EMITTERS } from './emitters.js';
-import { readUiConfig, generateTarget, type UiTarget } from './ui/config.js';
+import { readUiConfig, generateTarget, uiEnabled, type UiTarget } from './ui/config.js';
+import { computeUiScan, type UiScanResult } from './ui/scan.js';
 import { loadTokens } from './ui/tokens.js';
 import type { DriftItem } from './types.js';
 
@@ -61,14 +62,22 @@ export function cmdShow(root: string, id: string): string {
     .join('\n');
 }
 
-export function cmdScan(root: string): { report: string; problems: DriftItem[]; brokenRefs: BrokenRef[]; derived: DerivedDrift[] } {
+export function cmdScan(root: string): {
+  report: string;
+  problems: DriftItem[];
+  brokenRefs: BrokenRef[];
+  derived: DerivedDrift[];
+  ui: UiScanResult | null;
+} {
   const index = computeIndex(root);
   const tags = scanRepo(root);
   const probs = problems(computeDrift(tags, index));
   const entities = readAllEntities(root);
   const brokenRefs = computeBrokenRefs(entities, new Set(index.map((e) => e.id)));
   const derived = computeDerivedDrift(entities, new Map(index.map((e) => [e.id, e.version])));
-  const total = probs.length + brokenRefs.length + derived.length;
+  const ui = uiEnabled(root) ? computeUiScan(root) : null;
+  const total = probs.length + brokenRefs.length + derived.length + (ui?.problems.length ?? 0);
+  const tagCount = tags.length + (ui ? ui.implCount + ui.useCount : 0);
   const lines = [
     ...probs.map(
       (d) =>
@@ -81,10 +90,12 @@ export function cmdScan(root: string): { report: string; problems: DriftItem[]; 
         `  #${d.entity} derived from #${d.base}@${d.builtOn} -> ${d.status}` +
         (d.currentVersion !== null ? ` (current @${d.currentVersion})` : ''),
     ),
+    ...(ui?.problems.map((f) => f.line) ?? []),
   ];
-  const report =
-    total === 0 ? `Scanned ${tags.length} tag(s). No drift.` : `Scanned ${tags.length} tag(s). ${total} problem(s):\n` + lines.join('\n');
-  return { report, problems: probs, brokenRefs, derived };
+  let report =
+    total === 0 ? `Scanned ${tagCount} tag(s). No drift.` : `Scanned ${tagCount} tag(s). ${total} problem(s):\n` + lines.join('\n');
+  if (ui?.warnings.length) report += `\nWarnings (${ui.warnings.length}):\n` + ui.warnings.map((f) => f.line).join('\n');
+  return { report, problems: probs, brokenRefs, derived, ui };
 }
 
 export function cmdNotify(root: string, id: string): string {
@@ -193,7 +204,7 @@ async function main(): Promise<void> {
       case 'scan': {
         const r = cmdScan(root);
         console.log(r.report);
-        process.exit(r.problems.length + r.brokenRefs.length + r.derived.length ? 1 : 0);
+        process.exit(r.problems.length + r.brokenRefs.length + r.derived.length + (r.ui?.problems.length ?? 0) ? 1 : 0);
         break;
       }
       case 'reconcile':
