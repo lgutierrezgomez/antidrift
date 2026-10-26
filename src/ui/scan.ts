@@ -7,7 +7,8 @@ import { readUiConfig, staleTargets, globToRegExp } from './config.js';
 import { listComponentIds, loadComponent, brokenTokenRefs, type Component } from './components.js';
 import { validateTokenModes, type Token } from './tokens.js';
 import { parseUiTags } from './tags.js';
-import { findColorLiterals, colorIndex, isGeneratedFile, UI_EXTENSIONS, BUILD_SKIP_DIRS } from './hardcoded.js';
+import { findColorLiterals, colorIndex, isGeneratedFile, isTestFile, stripComments, UI_EXTENSIONS, BUILD_SKIP_DIRS } from './hardcoded.js';
+import { GENERATED_HEADER } from './token-emitters.js';
 
 export interface UiFinding {
   kind:
@@ -98,9 +99,11 @@ export function computeUiScan(root: string): UiScanResult {
         problems.push({ kind: 'broken-use', line: `  ${rel}:${u.line}  ${label} -> broken (no variant "${u.variant}")` });
     }
     const ext = rel.split('.').pop()!.toLowerCase();
-    if (!colors.size || !UI_EXTENSIONS.has(ext) || isGeneratedFile(rel) || generated.has(rel) || ignore.some((g) => g.test(rel))) continue;
-    content.split('\n').forEach((text, i) => {
-      if (text.includes('antidrift-allow')) return;
+    if (!colors.size || !UI_EXTENSIONS.has(ext) || isGeneratedFile(rel) || isTestFile(rel) || generated.has(rel)) continue;
+    if (ignore.some((g) => g.test(rel)) || content.slice(0, 300).includes(GENERATED_HEADER)) continue;
+    const original = content.split('\n');
+    stripComments(content).split('\n').forEach((text, i) => {
+      if (original[i].includes('antidrift-allow')) return; // the marker usually sits in a comment
       for (const lit of findColorLiterals(text)) {
         const paths = colors.get(lit.hex);
         if (paths) hardcoded.push({ kind: 'hardcoded', line: `  ${rel}:${i + 1}  ${lit.raw} matches token ${paths.join(', ')} [hardcoded]` });

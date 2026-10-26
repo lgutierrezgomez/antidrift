@@ -7,7 +7,8 @@ import { readUiConfig, staleTargets, globToRegExp } from './config.js';
 import { listComponentIds, loadComponent, brokenTokenRefs } from './components.js';
 import { validateTokenModes } from './tokens.js';
 import { parseUiTags } from './tags.js';
-import { findColorLiterals, colorIndex, isGeneratedFile, UI_EXTENSIONS, BUILD_SKIP_DIRS } from './hardcoded.js';
+import { findColorLiterals, colorIndex, isGeneratedFile, isTestFile, stripComments, UI_EXTENSIONS, BUILD_SKIP_DIRS } from './hardcoded.js';
+import { GENERATED_HEADER } from './token-emitters.js';
 /** Spec/implementation/use drift, stale generated token files, and hardcoded colors. Call only when uiEnabled(root). */
 export function computeUiScan(root) {
     const problems = [];
@@ -83,11 +84,14 @@ export function computeUiScan(root) {
                 problems.push({ kind: 'broken-use', line: `  ${rel}:${u.line}  ${label} -> broken (no variant "${u.variant}")` });
         }
         const ext = rel.split('.').pop().toLowerCase();
-        if (!colors.size || !UI_EXTENSIONS.has(ext) || isGeneratedFile(rel) || generated.has(rel) || ignore.some((g) => g.test(rel)))
+        if (!colors.size || !UI_EXTENSIONS.has(ext) || isGeneratedFile(rel) || isTestFile(rel) || generated.has(rel))
             continue;
-        content.split('\n').forEach((text, i) => {
-            if (text.includes('antidrift-allow'))
-                return;
+        if (ignore.some((g) => g.test(rel)) || content.slice(0, 300).includes(GENERATED_HEADER))
+            continue;
+        const original = content.split('\n');
+        stripComments(content).split('\n').forEach((text, i) => {
+            if (original[i].includes('antidrift-allow'))
+                return; // the marker usually sits in a comment
             for (const lit of findColorLiterals(text)) {
                 const paths = colors.get(lit.hex);
                 if (paths)

@@ -35,3 +35,33 @@ test('isGeneratedFile and skip sets', () => {
   expect(UI_EXTENSIONS.has('md')).toBe(false);
   expect(BUILD_SKIP_DIRS.has('.dart_tool')).toBe(true);
 });
+
+import { stripComments, isTestFile } from '../src/ui/hardcoded.js';
+
+test('stripComments blanks line, block and html comments but keeps line count and code', () => {
+  const src = [
+    "const a = '#1e5bff'; // was #0969da",
+    '/* primary #0969da',
+    '   still a comment #9a6700 */ const b = 1;',
+    '  * jsdoc #cf222e',
+    "const url = 'https://x.y/#fff';",
+    '<!-- #abcdef --> <div style="color:#123456">',
+  ].join('\n');
+  const out = stripComments(src).split('\n');
+  expect(out).toHaveLength(6);
+  expect(out[0]).toContain("'#1e5bff'");
+  expect(out[0]).not.toContain('#0969da');
+  expect(out[1]).not.toContain('#0969da');
+  expect(out[2]).not.toContain('#9a6700');
+  expect(out[2]).toContain('const b = 1;');
+  expect(out[3]).not.toContain('#cf222e');
+  expect(out[4]).toContain('https://x.y/#fff');
+  expect(out[5]).not.toContain('#abcdef');
+  expect(out[5]).toContain('#123456');
+});
+
+test('isTestFile', () => {
+  for (const f of ['a/b.test.ts', 'x.spec.tsx', 'lib/a_test.dart', 'test/widget.dart', 'web/e2e/x.ts', 'src/__tests__/a.js', 'integration_test/a.dart'])
+    expect(isTestFile(f)).toBe(true);
+  for (const f of ['src/latest.ts', 'lib/contest.dart', 'src/testing-utils.ts']) expect(isTestFile(f)).toBe(false);
+});

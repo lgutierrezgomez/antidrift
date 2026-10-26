@@ -11,6 +11,67 @@ export const BUILD_SKIP_DIRS = new Set(['build', '.dart_tool', 'Pods', '.next'])
 
 export const isGeneratedFile = (rel: string) => /\.(g|freezed)\.dart$|\.min\.[^/]+$/.test(rel);
 
+/** Test code legitimately compares against literal colors; the hardcoded check skips it. */
+export const isTestFile = (rel: string) =>
+  /(^|\/)(test|tests|__tests__|e2e|integration_test)\//.test(rel) || /\.(test|spec)\.[^/.]+$/.test(rel) || /_test\.dart$/.test(rel);
+
+/**
+ * Blank out comments (`//`, `/* *\/`, `<!-- -->`, stray JSDoc `*` lines) outside string literals,
+ * keeping every line and column where it was so findings still point at the right place.
+ */
+export function stripComments(src: string): string {
+  let out = '';
+  let mode: 'code' | 'line' | 'block' | 'html' = 'code';
+  let quote = '';
+  const lineStart = (i: number) => i === 0 || src[i - 1] === '\n';
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (c === '\n') {
+      if (mode === 'line') mode = 'code';
+      if (quote && quote !== '`') quote = '';
+      out += c;
+      continue;
+    }
+    if (mode === 'line') {
+      out += ' ';
+      continue;
+    }
+    if (mode === 'block' || mode === 'html') {
+      const end = mode === 'block' ? '*/' : '-->';
+      if (src.startsWith(end, i)) {
+        out += ' '.repeat(end.length);
+        i += end.length - 1;
+        mode = 'code';
+      } else out += ' ';
+      continue;
+    }
+    if (quote) {
+      if (c === '\\') {
+        out += c + (src[i + 1] ?? '');
+        i++;
+        continue;
+      }
+      if (c === quote) quote = '';
+      out += c;
+      continue;
+    }
+    if (lineStart(i)) {
+      const m = src.slice(i).match(/^[ \t]*\*(?=\s|$|\/)/);
+      if (m && !src.startsWith('*/', i + m[0].length - 1)) {
+        mode = 'line';
+        out += ' ';
+        continue;
+      }
+    }
+    if (c === '/' && src[i + 1] === '/') mode = 'line';
+    else if (c === '/' && src[i + 1] === '*') mode = 'block';
+    else if (src.startsWith('<!--', i)) mode = 'html';
+    else if (c === '"' || c === "'" || c === '`') quote = c;
+    out += mode === 'code' ? c : ' ';
+  }
+  return out;
+}
+
 const HEX_RE = /(?<![\w&])#([0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3})(?![0-9a-zA-Z])/g;
 const ARGB_RE = /Color\(\s*0x([0-9a-fA-F]{8})\s*\)/g;
 const RGB_RE = /rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*(0|1|0?\.\d+)\s*)?\)/g;

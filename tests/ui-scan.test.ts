@@ -139,3 +139,14 @@ test('cmdScan counts UI problems in its report', () => {
   expect(r.report).toContain('1 problem(s)');
   expect(r.report).toContain('impl #pagar_button@1 -> stale (current @2)');
 });
+
+test('hardcoded skips comments, test files and ad-hoc generated token files by default', () => {
+  enableUi();
+  put('web/a.tsx', "// brand is #1e5bff\nconst x = 1; /* #1e5bff */\n");
+  put('web/a.test.tsx', "expect(c).toBe('#1e5bff');\n");
+  put('App/test/widget_test.dart', 'Color(0xFF1E5BFF)\n');
+  cmdGenTokens(root, 'css', join(root, 'web/extra-tokens.css'));
+  expect(computeUiScan(root).warnings).toEqual([]);
+  put('web/b.tsx', "const c = '#1e5bff'; // real one\n");
+  expect(computeUiScan(root).warnings.map((w) => w.line)).toEqual(['  web/b.tsx:1  #1e5bff matches token color.brand.primary [hardcoded]']);
+});
