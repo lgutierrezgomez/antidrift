@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, lstatSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import type { UsageTag } from './types.js';
 
 const TAG_RE = /antidrift\s+#([A-Za-z0-9_.-]+)@(\d+)/g;
@@ -20,24 +20,31 @@ export function scanFile(path: string, root: string): UsageTag[] {
   return parseTags(readFileSync(path, 'utf8')).map((t) => ({ ...t, file: relative(root, path) }));
 }
 
-export function scanRepo(root: string): UsageTag[] {
-  const tags: UsageTag[] = [];
-  const walk = (dir: string) => {
-    for (const name of readdirSync(dir)) {
+/** Every regular file under root (default ignores, no symlinks, size-capped), with its POSIX relative path. */
+export function* walkFiles(root: string, skip?: (rel: string, isDir: boolean) => boolean): Generator<{ path: string; rel: string }> {
+  const walk = function* (dir: string): Generator<{ path: string; rel: string }> {
+    for (const name of readdirSync(dir).sort()) {
       if (IGNORE.has(name)) continue;
       const full = join(dir, name);
+      const rel = relative(root, full).split(sep).join('/');
       const st = lstatSync(full);
       if (st.isSymbolicLink()) continue;
-      if (st.isDirectory()) walk(full);
-      else if (st.isFile() && st.size <= MAX_BYTES) {
-        try {
-          tags.push(...scanFile(full, root));
-        } catch {
-          /* skip unreadable/binary */
-        }
-      }
+      if (st.isDirectory()) {
+        if (!skip?.(rel, true)) yield* walk(full);
+      } else if (st.isFile() && st.size <= MAX_BYTES && !skip?.(rel, false)) yield { path: full, rel };
     }
   };
-  walk(root);
+  yield* walk(root);
+}
+
+export function scanRepo(root: string): UsageTag[] {
+  const tags: UsageTag[] = [];
+  for (const { path } of walkFiles(root)) {
+    try {
+      tags.push(...scanFile(path, root));
+    } catch {
+      /* skip unreadable/binary */
+    }
+  }
   return tags;
 }
