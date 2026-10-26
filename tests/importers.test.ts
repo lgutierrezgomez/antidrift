@@ -132,3 +132,8 @@ test('importers take title and summary from the schema', () => {
   const [plain] = importJsonSchema(JSON.stringify({ $defs: { Place: { type: 'object' } } }), 'x');
   expect(plain.title).toBeUndefined();
 });
+test('json-schema importer drops a definition-level $id (Zod registry exports set "#/$defs/X")', () => {
+  const src = JSON.stringify({ $defs: { Place: { $id: '#/$defs/Place', type: 'object' } } });
+  const [p] = importJsonSchema(src, 'x');
+  expect(p.schema.$id).toBeUndefined();
+});

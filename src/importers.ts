@@ -23,7 +23,9 @@ export function stripRefs(node: unknown): unknown {
 
 /** A fresh entity at @1 with its hash already stamped, titled/summarized from the schema when it says. */
 const mk = (id: string, schema: Record<string, unknown>, relationships: string[] = []): Entity => {
-  const clean = stripRefs(schema) as Record<string, unknown>;
+  // A definition becomes its own document, so its old `$id` (often "#/$defs/X", invalid on its own) goes.
+  const { $id: _id, ...rest } = schema;
+  const clean = stripRefs(rest) as Record<string, unknown>;
   return {
     id: sanitizeId(id),
     version: 1,
