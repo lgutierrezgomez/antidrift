@@ -105,3 +105,22 @@ Opt-in: nothing changes until `.antidrift/tokens/` or `.antidrift/components/` e
   entity ids share one namespace; a clash is a `scan` problem, not a crash.
 - Emitters: CSS custom properties and Dart now; TS, Kotlin (Compose), Swift (SwiftUI) are one
   `TokenEmitter` module each later. Identifier collisions (e.g. `a-b` vs `aB` in Dart) are errors.
+
+## Wave 6 (gaps from the first real-project trial on `code/security`), v0.4.0
+- **Modes are multi-axis.** The trial project switches scheme (light/dark, following the OS) and
+  palette independently, so a light/dark-only design would not fit. Other-mode values live in DTCG's
+  `$extensions["com.antidrift.modes"]` keyed by mode names (`dark`, `dark+savile`); axes are declared
+  in `ui.json`. Most specific wins; two single-axis values without their combination is an error
+  (ambiguous cascade). Mode values are literals only. CSS gets attribute-selector blocks (+
+  `prefers-color-scheme` for `followSystem` axes); Dart gets one full class per combination.
+- **Hardcoded check skips comments** (every real-looking hit in the trial was a hex quoted in a
+  comment), **test files**, and files carrying antidrift's generated header (covers ad-hoc
+  `gen-tokens <lang> <out>` output). `antidrift-allow` is matched on the original line.
+- **json-schema importer**: `$ref`s between `$defs` become relationships; `title`/`description` fill
+  title/summary; all importers stamp the hash at import. Zod users are told to register shared
+  schemas so they export as `$ref`s.
+- **`show <component>` is compact** by default (other states list only what differs); `--full`
+  expands. The trial's 4×3 button printed 91 lines expanded.
+- **Skill: follow the mapping** — tag files that convert an entity into another shape even when they
+  don't import its type (the trial missed the Flutter domain models this way).
+- `ui.json` that isn't a JSON object now errors clearly (was a TypeError).

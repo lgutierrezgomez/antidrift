@@ -168,7 +168,10 @@ browser bundle.
 
 `import <format> <file>` bootstraps entities from an existing source — one entity per type, at
 version 1:
-- **json-schema** — `$defs`/`definitions`, or the whole doc as one entity.
+- **json-schema** — `$defs`/`definitions`, or the whole doc as one entity; `$ref`s between them
+  become relationships, and a schema's `title`/`description` become the entity's title and summary.
+  *From Zod:* `z.toJSONSchema()` inlines nested schemas, so register shared ones first
+  (`z.globalRegistry.add(schema, { id })`) to get `$ref`s — and therefore relationships.
 - **openapi** — `components.schemas`; `$ref`s become relationships.
 - **prisma** — `model` blocks (scalars → properties, `?`/`[]` honored, relations → relationships,
   `enum` blocks → `{ "enum": [...] }`). Parsed by a light in-repo parser; composite and
@@ -177,6 +180,7 @@ version 1:
   become `{ "enum": [...] }`. Custom scalars and interface/union fields are skipped.
 
 Anything an importer skips is listed under `notes:` in the import output, so you can add it by hand.
+Imported entities start at `@1` with their hash already stamped.
 
 ## Type generation
 
@@ -254,6 +258,33 @@ and copies one). Supported `$type`s: `color`, `dimension`, `fontFamily`, `fontWe
 
 `/antidrift:tokens [prefix]` lists them with resolved values.
 
+#### Modes (dark mode, palettes, high contrast…)
+
+Declare each independent mode dimension in `ui.json` — the first value is the default:
+
+```json
+"modes": [
+  { "axis": "scheme",  "values": ["light", "dark"], "attribute": "data-theme", "followSystem": true },
+  { "axis": "palette", "values": ["github", "savile"], "attribute": "data-palette" }
+]
+```
+
+A token keeps its default in `$value` and its other-mode values in DTCG's extension slot:
+
+```json
+"primary": {
+  "$value": "#0969DA",
+  "$extensions": { "com.antidrift.modes": { "dark": "#58A6FF", "savile": "#3C5A70", "dark+savile": "#7FA8C4" } }
+}
+```
+
+The most specific value wins (`dark+savile` beats `dark`). If a token sets `dark` and `savile` but not
+`dark+savile`, that's an error — the result would be ambiguous. CSS output adds one block per mode
+(`:root[data-theme="dark"][data-palette="savile"] { … }`) plus a `prefers-color-scheme` block for axes
+with `followSystem`; Dart output adds one complete class per combination (`DsTokens`,
+`DsTokensDark`, `DsTokensSavile`, `DsTokensDarkSavile`). Hardcoded-color matching knows every mode's
+values.
+
 ### Component specs
 
 `.antidrift/components/pagar_button.json`:
@@ -284,8 +315,10 @@ and copies one). Supported `$type`s: `color`, `dimension`, `fontFamily`, `fontWe
   change does not (it reaches every platform through `gen-tokens`).
 - Component and entity ids share one namespace.
 
-`/antidrift:show pagar_button` prints the full variant × state matrix with every token resolved —
-exactly what an agent needs to build or review an implementation on any platform.
+`/antidrift:show pagar_button` prints the variant × state matrix with every token resolved (and its
+mode values) — exactly what an agent needs to build or review an implementation on any platform.
+Each variant's `default` is listed in full and other states only show what they change;
+`show pagar_button --full` expands every slot.
 
 ### Tags
 
@@ -312,8 +345,10 @@ screen) and are **broken** only when the component or variant disappears.
 The hardcoded check reads UI files (`css scss less html ts tsx js jsx vue svelte dart kt swift`) and
 recognizes `#rgb`/`#rrggbb`/`#rrggbbaa`, `Color(0xAARRGGBB)` and `rgb()/rgba()`. It skips generated
 targets, build output (`build/`, `.dart_tool/`, `Pods/`, `.next/`, `*.g.dart`, `*.freezed.dart`,
-`*.min.*`), `ui.json` `ignore` globs, and any line containing `antidrift-allow`. Start with warnings
-on an existing app, clean up, then switch to `"error"`.
+`*.min.*`), test files (`*.test.*`, `*.spec.*`, `*_test.dart`, `test/`, `e2e/`…), any file that
+starts with antidrift's generated header, comments, `ui.json` `ignore` globs (use them for a
+hand-written token file you haven't replaced yet), and any line containing `antidrift-allow`. Start
+with warnings on an existing app, clean up, then switch to `"error"`.
 
 The change hook also watches `components/` (reports stale implementations) and `tokens/` (reports
 which generated files to regenerate). It never writes generated files itself.
@@ -340,5 +375,4 @@ code-vs-schema verification, auto-inserting comments without the agent, and mult
 `docs/superpowers/specs/2026-10-11-antidrift-design.md`. (Importers, relationships, `tag`, and
 `gen-types` shipped in wave 2 — `docs/superpowers/specs/2026-10-11-antidrift-wave2-design.md`. The
 optional UI module shipped in v0.4.0 — `docs/superpowers/specs/2026-10-26-antidrift-ui-design.md`;
-generating components, hardcoded-dimension detection, themes/modes and composite tokens are out of
-scope for it.)
+generating components, hardcoded-dimension detection and composite tokens are out of scope for it.)

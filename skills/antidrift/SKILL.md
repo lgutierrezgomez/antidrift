@@ -14,6 +14,10 @@ front and back. Follow these rules whenever you touch entity-shaped code.
   add a comment `antidrift #<id>@<version>` (inside the file's own comment syntax) using the
   entity's current version. One tag per file per entity is enough; don't tag every line. Front and
   back must tag against the same entity id.
+- **Follow the mapping, not just the imports.** A file that converts an entity into another shape —
+  a domain model, view model, form state, mapper, DTO — breaks when the entity changes even if it
+  never names the entity's type (it may only see the mapped class). Tag it too. When bootstrapping,
+  start from the files that decode/encode the entity, then follow what they map it into.
 - **On a stale reminder.** If a hook tells you an entity changed and usage sites are stale,
   re-read `.antidrift/entities/<id>.json`, update the affected code, and bump the tag's
   `@version` to the new version.

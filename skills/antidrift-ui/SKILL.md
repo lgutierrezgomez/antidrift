@@ -11,6 +11,10 @@ each property uses per variant × state, and code is tagged as an **implementati
 - **Before building or editing a UI component, read its spec.** Run `/antidrift:show <id>` — it prints
   the full variant × state matrix with tokens resolved. Don't read the whole store; `/antidrift:list`
   shows what exists, `/antidrift:tokens [prefix]` lists token values.
+- **Modes (dark, palettes…).** A token's other-mode values live in
+  `$extensions["com.antidrift.modes"]` (`{ "dark": "#58A6FF", "dark+savile": "…" }`), with the axes
+  declared in `ui.json` `modes`. `show`/`tokens` print them as `[dark: …]`. When a token sets values
+  for two axes, also set their combination — `scan` asks for it if missing.
 - **Use generated tokens, never literals.** Each design system imports its generated token file
   (paths in `.antidrift/ui.json` `targets`). Never type a color like `#1E5BFF` or `Color(0xFF1E5BFF)`
   in UI code — `scan` flags literals that match a token. If a literal truly must stay (an email
