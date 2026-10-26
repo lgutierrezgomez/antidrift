@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { fileURLToPath } from 'node:url';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { buildIndex, computeIndex, readEntity, readAllEntities, writeEntity, assertValidSchema, reconcileEntity, initStore, storeDir } from './store.js';
 import { scanRepo } from './scanner.js';
 import { computeDrift, problems } from './drift.js';
@@ -9,6 +9,8 @@ import { computeBrokenRefs, computeDerivedDrift, type BrokenRef, type DerivedDri
 import { commentSyntax } from './comment.js';
 import { IMPORTERS } from './importers.js';
 import { EMITTERS } from './emitters.js';
+import { readUiConfig, generateTarget, type UiTarget } from './ui/config.js';
+import { loadTokens } from './ui/tokens.js';
 import type { DriftItem } from './types.js';
 
 export function cmdList(root: string): string {
@@ -149,8 +151,25 @@ export async function cmdGenTypes(root: string, lang = 'ts', out?: string): Prom
   return `wrote ${dest} and ${enumsDest}`;
 }
 
+/** Regenerate token files: every ui.json target, or one ad-hoc `lang` + `out`. */
+export function cmdGenTokens(root: string, lang?: string, out?: string): string {
+  const targets: UiTarget[] = lang ? [{ lang, out: resolve(requireArg(out, 'out')) }] : readUiConfig(root).targets;
+  if (targets.length === 0)
+    return 'antidrift: no token targets. Add one to .antidrift/ui.json, e.g. {"targets":[{"lang":"css","out":"web/ds/tokens.css"}]}, or run gen-tokens <lang> <out>.';
+  const tokens = loadTokens(root);
+  const written: string[] = [];
+  for (const t of targets) {
+    const dest = resolve(root, t.out);
+    const code = generateTarget(root, t, tokens);
+    mkdirSync(dirname(dest), { recursive: true });
+    writeFileSync(dest, code);
+    written.push(t.out);
+  }
+  return `wrote ${written.join(', ')}`;
+}
+
 const USAGE =
-  'usage: antidrift <init|list|show <id>|scan|reconcile <id>|notify <id>|tag <id> <file:line>|import <format> <file>|gen-types [lang] [out]>';
+  'usage: antidrift <init|list|show <id>|scan|reconcile <id>|notify <id>|tag <id> <file:line>|import <format> <file>|gen-types [lang] [out]|gen-tokens [lang out]>';
 function requireArg(arg: string | undefined, what: string): string {
   if (!arg) throw new Error(`missing <${what}>. ${USAGE}`);
   return arg;
@@ -191,6 +210,9 @@ async function main(): Promise<void> {
         break;
       case 'gen-types':
         console.log(await cmdGenTypes(root, arg ?? 'ts', process.argv[4]));
+        break;
+      case 'gen-tokens':
+        console.log(cmdGenTokens(root, arg, process.argv[4]));
         break;
       default:
         console.error(USAGE);
