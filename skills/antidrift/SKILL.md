@@ -42,5 +42,13 @@ front and back. Follow these rules whenever you touch entity-shaped code.
   imports the enums file — never the validator. For runtime validation, use Ajv's 2020-12 build
   (`Ajv2020` from `ajv/dist/2020.js`); see the README's "Validating at runtime" section.
 
+- **Optional UI module.** antidrift can also track design tokens and UI component specs (spec →
+  implementations per design system → uses). It's opt-in and opinionated. If `.antidrift/tokens/` and
+  `.antidrift/components/` don't exist and the developer is actively working on design-system or UI
+  code, you may suggest it **once per conversation** in two or three sentences (one spec per UI
+  element with its variants/states/tokens, implementations tagged per design system, uses tagged per
+  screen, token files generated for each platform, hardcoded colors flagged). Never set it up unless
+  they say yes; then run `/antidrift:ui-init`. Don't suggest it during unrelated work.
+
 antidrift flags drift; it does not verify that your code matches the schema. When a site is
 stale, YOU re-read the entity and decide whether the code still fits.

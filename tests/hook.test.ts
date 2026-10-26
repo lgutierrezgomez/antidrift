@@ -1,6 +1,6 @@
 import { test, expect, beforeEach } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -59,4 +59,28 @@ test('hook ignores a nested relative path under entities', () => {
   const input = JSON.stringify({ tool_input: { file_path: '.antidrift/entities/nested/student.json' } });
   const out = execFileSync('bash', [HOOK], { input, cwd: proj, env: { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT }, encoding: 'utf8' });
   expect(out.trim()).toBe('');
+});
+
+test('hook reports stale implementations when a component changes', () => {
+  mkdirSync(join(proj, '.antidrift', 'components'), { recursive: true });
+  const spec = {
+    id: 'pagar_button', version: 2, hash: 'old', variants: ['primary'], states: ['default'],
+    styles: { primary: { default: { background: '{color.brand.primary}' } } },
+  };
+  writeFileSync(join(proj, '.antidrift', 'components', 'pagar_button.json'), JSON.stringify(spec));
+  writeFileSync(join(proj, 'Pagar.tsx'), '// antidrift impl #pagar_button@2\n');
+  const out = runHook(join(proj, '.antidrift', 'components', 'pagar_button.json'), { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT });
+  const ctx = JSON.parse(out).hookSpecificOutput.additionalContext as string;
+  expect(ctx).toContain('STALE');
+  expect(ctx).toContain('Pagar.tsx:1');
+});
+
+test('hook reports out-of-date token files without writing them', () => {
+  mkdirSync(join(proj, '.antidrift', 'tokens'), { recursive: true });
+  writeFileSync(join(proj, '.antidrift', 'tokens', 'base.json'), JSON.stringify({ c: { $type: 'color', a: { $value: '#000000' } } }));
+  writeFileSync(join(proj, '.antidrift', 'ui.json'), JSON.stringify({ targets: [{ lang: 'css', out: 'web/tokens.css' }] }));
+  const out = runHook(join(proj, '.antidrift', 'tokens', 'base.json'), { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT });
+  const ctx = JSON.parse(out).hookSpecificOutput.additionalContext as string;
+  expect(ctx).toContain('run gen-tokens');
+  expect(existsSync(join(proj, 'web', 'tokens.css'))).toBe(false);
 });

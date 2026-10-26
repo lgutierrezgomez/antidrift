@@ -1,0 +1,75 @@
+import { readFileSync } from 'node:fs';
+import { resolve, relative, sep } from 'node:path';
+import { computeIndex } from '../store.js';
+import { walkFiles } from '../scanner.js';
+import { loadTokens } from './tokens.js';
+import { readUiConfig, staleTargets, globToRegExp } from './config.js';
+import { readComponent, brokenTokenRefs } from './components.js';
+import { parseUiTags } from './tags.js';
+import { findColorLiterals, colorIndex, isGeneratedFile, UI_EXTENSIONS, BUILD_SKIP_DIRS } from './hardcoded.js';
+/** Spec/implementation/use drift, stale generated token files, and hardcoded colors. Call only when uiEnabled(root). */
+export function computeUiScan(root) {
+    const tokens = loadTokens(root);
+    const cfg = readUiConfig(root);
+    const index = computeIndex(root);
+    const entityIds = new Set(index.filter((e) => !e.kind).map((e) => e.id));
+    const components = new Map(index.filter((e) => e.kind === 'component').map((e) => [e.id, readComponent(root, e.id)]));
+    const problems = [];
+    const hardcoded = [];
+    for (const id of components.keys())
+        if (entityIds.has(id))
+            problems.push({ kind: 'id-clash', line: `  #${id} is both an entity and a component [id-clash]` });
+    for (const c of components.values())
+        for (const b of brokenTokenRefs(c, tokens))
+            problems.push({ kind: 'broken-token', line: `  #${b.component} ${b.slot} -> ${b.ref} [broken-token]` });
+    for (const t of staleTargets(root, cfg))
+        problems.push({ kind: 'stale-generated', line: `  ${t.out} -> out of date or hand-edited (run gen-tokens)` });
+    const generated = new Set(cfg.targets.map((t) => relative(root, resolve(root, t.out)).split(sep).join('/')));
+    const ignore = cfg.ignore.map(globToRegExp);
+    const colors = colorIndex(tokens);
+    let implCount = 0;
+    let useCount = 0;
+    const skipDir = (rel, isDir) => isDir && BUILD_SKIP_DIRS.has(rel.split('/').pop());
+    for (const { path, rel } of walkFiles(root, skipDir)) {
+        let content;
+        try {
+            content = readFileSync(path, 'utf8');
+        }
+        catch {
+            continue;
+        }
+        const { impls, uses } = parseUiTags(content, rel);
+        implCount += impls.length;
+        useCount += uses.length;
+        for (const t of impls) {
+            const c = components.get(t.id);
+            if (!c)
+                problems.push({ kind: 'orphan-impl', line: `  ${rel}:${t.line}  impl #${t.id}@${t.version} -> orphan` });
+            else if (t.version < c.version)
+                problems.push({ kind: 'stale-impl', line: `  ${rel}:${t.line}  impl #${t.id}@${t.version} -> stale (current @${c.version})` });
+        }
+        for (const u of uses) {
+            const c = components.get(u.id);
+            const label = `use #${u.id}${u.variant ? `:${u.variant}` : ''}`;
+            if (!c)
+                problems.push({ kind: 'broken-use', line: `  ${rel}:${u.line}  ${label} -> broken (no component)` });
+            else if (u.variant && !c.variants.includes(u.variant))
+                problems.push({ kind: 'broken-use', line: `  ${rel}:${u.line}  ${label} -> broken (no variant "${u.variant}")` });
+        }
+        const ext = rel.split('.').pop().toLowerCase();
+        if (!colors.size || !UI_EXTENSIONS.has(ext) || isGeneratedFile(rel) || generated.has(rel) || ignore.some((g) => g.test(rel)))
+            continue;
+        content.split('\n').forEach((text, i) => {
+            if (text.includes('antidrift-allow'))
+                return;
+            for (const lit of findColorLiterals(text)) {
+                const paths = colors.get(lit.hex);
+                if (paths)
+                    hardcoded.push({ kind: 'hardcoded', line: `  ${rel}:${i + 1}  ${lit.raw} matches token ${paths.join(', ')} [hardcoded]` });
+            }
+        });
+    }
+    return cfg.hardcoded === 'error'
+        ? { problems: [...problems, ...hardcoded], warnings: [], implCount, useCount }
+        : { problems, warnings: hardcoded, implCount, useCount };
+}

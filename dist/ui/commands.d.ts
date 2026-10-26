@@ -1,0 +1,15 @@
+import { type TokenValue } from './tokens.js';
+import { type ImplTag, type UseTag } from './tags.js';
+export declare function formatTokenValue(v: TokenValue): string;
+/** Every impl/use tag in the repo (build output folders skipped). */
+export declare function collectUiTags(root: string): {
+    impls: ImplTag[];
+    uses: UseTag[];
+};
+export declare function cmdShowComponent(root: string, id: string): string;
+export declare function cmdTokens(root: string, prefix?: string): string;
+export declare function cmdNotifyComponent(root: string, id: string): string;
+export declare function cmdNotifyTokens(root: string): string;
+/** Copy a DTCG file into .antidrift/tokens/ after validating it together with the existing tokens. */
+export declare function cmdImportTokens(root: string, file: string): string;
+export declare function cmdUiInit(root: string): string;

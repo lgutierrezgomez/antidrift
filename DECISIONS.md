@@ -84,3 +84,24 @@ Shipped all four; 45 tests, clean build, pushed to GitHub. Decisions:
   trigger it; `x.antidrift/…` and nested folders are ignored.
 - **Cleanup:** removed the dead `SLASH` set; dropped `@types/js-yaml` (v4 types) since js-yaml v5
   ships its own; the `show` incoming-relationship test now asserts the actual referrer.
+
+## Wave 5 (optional UI module — `docs/superpowers/specs/2026-10-26-antidrift-ui-design.md`), v0.4.0
+Opt-in: nothing changes until `.antidrift/tokens/` or `.antidrift/components/` exists. Decisions:
+- **Tokens are DTCG, not versioned or tagged one by one.** Token drift shows up as stale generated
+  files (regenerated in memory and compared, which also catches hand edits), broken token refs in
+  specs, and hardcoded colors.
+- **Component specs hold token references only**; a state merges over its variant's `default`.
+  `version`/`hash` work like entities (hash over variants/states/styles), so a token value change
+  never flags implementations.
+- **`impl` tags are versioned, `use` tags aren't** — a use is broken only when its component or
+  variant disappears, so a color tweak doesn't flag every screen.
+- **Hardcoded colors are warnings by default** (user decision); `"hardcoded": "error"` in `ui.json`
+  makes them fail `scan`. Colors only — dimension literals match too much unrelated code. Skips
+  build output, generated targets, `ignore` globs, and `antidrift-allow` lines.
+- **Hook reports, never writes** generated token files.
+- **Skill suggests the module at most once per conversation, only during UI work**, with no stored
+  "declined" state (keeps the zero-footprint promise).
+- Entity index entries keep their shape; components are added with `kind: "component"`. Component and
+  entity ids share one namespace; a clash is a `scan` problem, not a crash.
+- Emitters: CSS custom properties and Dart now; TS, Kotlin (Compose), Swift (SwiftUI) are one
+  `TokenEmitter` module each later. Identifier collisions (e.g. `a-b` vs `aB` in Dart) are errors.

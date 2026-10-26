@@ -16,6 +16,8 @@ export interface IndexEntry {
     hash: string;
     summary: string;
     file: string;
+    /** Absent for entities (their entries keep the original shape). */
+    kind?: 'component';
 }
 export interface UsageTag {
     id: string;

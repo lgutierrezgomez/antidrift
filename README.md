@@ -88,6 +88,7 @@ stale, you re-read the one entity and decide whether the code still fits.
 | `/antidrift:gen-types [lang] [out]` | Emit shared types from the entity schemas (TypeScript by default), plus a values-only `*.enums.ts` |
 
 The CLI behind them: `node dist/cli.js <init|list|show <id>|scan|reconcile <id>|notify <id>|tag <id> <file:line>|import <format> <file>|gen-types [lang] [out]>`.
+The optional UI module adds a few more — see [UI module (optional)](#ui-module-optional).
 
 ## Relationships
 
@@ -194,6 +195,129 @@ version, recomputes the hash, and injects a reminder into the agent's next step 
 and revalidate."* Notification is between-steps (an LLM can't be interrupted mid-generation); it is
 a loud reminder plus a stale list, not a file lock.
 
+## UI module (optional)
+
+This is **one way of working** with UI elements — if it fits your project, turn it on; if not, ignore
+it. Nothing below runs, prints, or fails until `.antidrift/tokens/` or `.antidrift/components/` exists.
+
+The idea is the same as for entities, applied to a design system, in three layers:
+
+1. **Spec** — one index entry per UI element, e.g. `pagar_button`: its variants, states, and which
+   **token** each visual property uses in each variant × state.
+2. **Implementations** — one per design-system folder (a `div`-based web component, a Flutter
+   widget…). If all your apps share one drawing tech, that's one DS folder; with several (say Flutter
+   + Angular), each app keeps its own DS folder.
+3. **Uses** — every screen that places the element.
+
+**Tokens** (colors, radii, spacing, font sizes…) live in antidrift as the single source of truth for
+*values*, and antidrift **generates each design system's token file** from them.
+
+### Setup
+
+`/antidrift:ui-init` (CLI: `ui init`) creates `.antidrift/tokens/`, `.antidrift/components/`, a
+starter `tokens/base.json`, and `.antidrift/ui.json`. Point `ui.json` at your DS folders:
+
+```json
+{
+  "targets": [
+    { "lang": "css",  "out": "apps/web/src/ds/tokens.css" },
+    { "lang": "dart", "out": "apps/mobile/lib/ds/tokens.dart", "className": "DsTokens" }
+  ],
+  "ignore": ["apps/web/src/legacy/**"],
+  "hardcoded": "warn"
+}
+```
+
+Then `/antidrift:gen-tokens` writes every target. Generated files start with a *do not edit* header;
+`scan` regenerates them in memory and flags any that are out of date **or hand-edited**. CSS custom
+properties and Dart are supported today; TS, Kotlin (Compose) and Swift (SwiftUI) are planned.
+
+### Tokens
+
+Token files use the [W3C Design Tokens (DTCG)](https://www.designtokens.org/) format — so an export
+from Figma tooling or Style Dictionary can be dropped in (`/antidrift:import tokens <file>` validates
+and copies one). Supported `$type`s: `color`, `dimension`, `fontFamily`, `fontWeight`, `number`,
+`duration`. Aliases (`"$value": "{color.brand.primary}"`) are resolved.
+
+```json
+{
+  "color": {
+    "$type": "color",
+    "brand": { "primary": { "$value": "#1E5BFF" } },
+    "on-brand": { "$value": "#FFFFFF" },
+    "neutral": { "300": { "$value": "#D0D4DC" }, "600": { "$value": "#5A6170" } },
+    "transparent": { "$value": "#00000000" }
+  },
+  "radius": { "md": { "$type": "dimension", "$value": { "value": 8, "unit": "px" } } }
+}
+```
+
+`/antidrift:tokens [prefix]` lists them with resolved values.
+
+### Component specs
+
+`.antidrift/components/pagar_button.json`:
+
+```json
+{
+  "id": "pagar_button", "version": 1, "hash": "",
+  "title": "Pagar button", "summary": "Primary pay action at checkout.",
+  "variants": ["primary", "secondary"],
+  "states": ["default", "pressed", "disabled", "loading"],
+  "styles": {
+    "primary": {
+      "default":  { "background": "{color.brand.primary}", "text": "{color.on-brand}", "radius": "{radius.md}" },
+      "disabled": { "background": "{color.neutral.300}", "text": "{color.neutral.600}" }
+    },
+    "secondary": {
+      "default": { "background": "{color.transparent}", "text": "{color.brand.primary}", "radius": "{radius.md}" }
+    }
+  }
+}
+```
+
+- Style values are **token references only**. A state merges over its variant's `default`; an omitted
+  state *is* the `default`.
+- Property names are free-form. A small shared vocabulary helps agents: `background`, `text`,
+  `border`, `radius`, `paddingX`, `paddingY`, `fontSize`, `fontWeight`, `fontFamily`.
+- Like entities, the tool owns `version`/`hash`: any spec change bumps the version; a token *value*
+  change does not (it reaches every platform through `gen-tokens`).
+- Component and entity ids share one namespace.
+
+`/antidrift:show pagar_button` prints the full variant × state matrix with every token resolved —
+exactly what an agent needs to build or review an implementation on any platform.
+
+### Tags
+
+```tsx
+// antidrift impl #pagar_button@3      ← once, in the file that implements it (per DS)
+// antidrift use #pagar_button:primary ← once per screen that uses it (variant optional)
+```
+
+`/antidrift:tag <id> <file:line> --impl` or `--use[=variant]` inserts them. Implementations are
+versioned and go **stale** when the spec changes; uses aren't (a color tweak shouldn't flag every
+screen) and are **broken** only when the component or variant disappears.
+
+### What `scan` adds
+
+| Finding | Counts toward exit code |
+|---|---|
+| stale / orphan implementation (`impl #x@2 -> stale (current @3)`) | yes |
+| broken use (`use #x:tertiary -> broken (no variant "tertiary")`) | yes |
+| broken token reference in a spec (`[broken-token]`) | yes |
+| generated token file out of date or hand-edited | yes |
+| entity/component id clash | yes |
+| **hardcoded color** that matches a token (`#1e5bff matches token color.brand.primary`) | no — listed under *Warnings*, unless `"hardcoded": "error"` |
+
+The hardcoded check reads UI files (`css scss less html ts tsx js jsx vue svelte dart kt swift`) and
+recognizes `#rgb`/`#rrggbb`/`#rrggbbaa`, `Color(0xAARRGGBB)` and `rgb()/rgba()`. It skips generated
+targets, build output (`build/`, `.dart_tool/`, `Pods/`, `.next/`, `*.g.dart`, `*.freezed.dart`,
+`*.min.*`), `ui.json` `ignore` globs, and any line containing `antidrift-allow`. Start with warnings
+on an existing app, clean up, then switch to `"error"`.
+
+The change hook also watches `components/` (reports stale implementations) and `tokens/` (reports
+which generated files to regenerate). It never writes generated files itself.
+
 ## Transparency — what it runs
 
 antidrift runs **entirely on your machine** and makes **no network calls and sends no telemetry** —
@@ -212,7 +336,9 @@ nothing leaves your computer.
 ## Not in scope (v1)
 
 Generating application code (beyond the opt-in shared types from `gen-types`), semantic
-code-vs-schema verification, auto-inserting comments without the agent, multi-repo, and the
-design-system (tokens/components) extension — see
+code-vs-schema verification, auto-inserting comments without the agent, and multi-repo — see
 `docs/superpowers/specs/2026-10-11-antidrift-design.md`. (Importers, relationships, `tag`, and
-`gen-types` shipped in wave 2 — `docs/superpowers/specs/2026-10-11-antidrift-wave2-design.md`.)
+`gen-types` shipped in wave 2 — `docs/superpowers/specs/2026-10-11-antidrift-wave2-design.md`. The
+optional UI module shipped in v0.4.0 — `docs/superpowers/specs/2026-10-26-antidrift-ui-design.md`;
+generating components, hardcoded-dimension detection, themes/modes and composite tokens are out of
+scope for it.)
